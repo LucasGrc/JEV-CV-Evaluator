@@ -24,6 +24,8 @@ import {
 import { formatJevCost } from '@/lib/pricing';
 import { CVDocumentViewer } from '@/components/CVDocumentViewer';
 import { EvaluationCriteriaModal } from '@/components/EvaluationCriteriaModal';
+import { mapPrismaEvaluationToResult } from '@/lib/evaluationMapper';
+import { EvaluationResult } from '@/types/evaluation';
 
 interface CandidateApp {
   id: string;
@@ -88,6 +90,7 @@ export default function VacancyDetailClient({ vacancy: initialVacancy }: Vacancy
     targetRole: string;
     cvText: string;
     fileName?: string;
+    evaluation?: EvaluationResult | null;
   } | null>(null);
 
   const [showCriteriaModal, setShowCriteriaModal] = useState(false);
@@ -547,16 +550,27 @@ export default function VacancyDetailClient({ vacancy: initialVacancy }: Vacancy
                       <td className="py-4 px-4 text-right">
                         <div className="flex items-center justify-end gap-2">
                           <button
-                            onClick={() =>
+                            onClick={() => {
+                              const mappedEvaluation = app.evaluation
+                                ? mapPrismaEvaluationToResult(
+                                    app.evaluation,
+                                    app.candidate.fullName,
+                                    vacancy.title,
+                                    app.cvDocument.extractedText,
+                                    vacancy.minScoreThreshold
+                                  )
+                                : null;
+
                               setSelectedCVForViewer({
                                 candidateName: app.candidate.fullName,
                                 targetRole: vacancy.title,
                                 cvText: app.cvDocument.extractedText,
                                 fileName: app.cvDocument.fileName,
-                              })
-                            }
+                                evaluation: mappedEvaluation,
+                              });
+                            }}
                             className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-blue-700 border border-slate-200 transition-colors"
-                            title="Ver documento CV extraído"
+                            title="Ver documento CV extraído y evaluación"
                           >
                             <Eye className="w-3.5 h-3.5" />
                             <span>Ver CV</span>
@@ -581,6 +595,8 @@ export default function VacancyDetailClient({ vacancy: initialVacancy }: Vacancy
             targetRole: selectedCVForViewer.targetRole,
             cvText: selectedCVForViewer.cvText,
           }}
+          evaluation={selectedCVForViewer.evaluation ?? undefined}
+          initialTab={selectedCVForViewer.evaluation ? 'evaluation' : 'document'}
           onClose={() => setSelectedCVForViewer(null)}
         />
       )}

@@ -58,7 +58,7 @@ export async function storeAndParseCV(
     const unpdfResult = await extractText(new Uint8Array(fileBuffer));
     extractedText = Array.isArray(unpdfResult.text)
       ? unpdfResult.text.join('\n').trim()
-      : (unpdfResult.text || '').trim();
+      : String(unpdfResult.text ?? '').trim();
     pageCount = unpdfResult.totalPages || 1;
   } catch (unpdfErr: any) {
     try {
