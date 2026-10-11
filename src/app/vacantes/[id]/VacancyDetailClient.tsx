@@ -20,6 +20,9 @@ import {
   RefreshCw,
   Coins,
   Check,
+  MessageSquare,
+  Filter,
+  X,
 } from 'lucide-react';
 import { formatJevCost } from '@/lib/pricing';
 import { CVDocumentViewer } from '@/components/CVDocumentViewer';
@@ -27,9 +30,47 @@ import { EvaluationCriteriaModal } from '@/components/EvaluationCriteriaModal';
 import { mapPrismaEvaluationToResult } from '@/lib/evaluationMapper';
 import { EvaluationResult } from '@/types/evaluation';
 
+export const STAGE_CONFIG: Record<
+  string,
+  { label: string; badge: string; dot: string }
+> = {
+  APPLIED: {
+    label: 'Postulado',
+    badge: 'bg-slate-100 text-slate-700 border-slate-300',
+    dot: 'bg-slate-400',
+  },
+  REVIEWING: {
+    label: 'En Revisión',
+    badge: 'bg-amber-50 text-amber-800 border-amber-300',
+    dot: 'bg-amber-500',
+  },
+  INTERVIEW: {
+    label: 'Entrevista',
+    badge: 'bg-purple-50 text-purple-800 border-purple-300',
+    dot: 'bg-purple-500',
+  },
+  OFFER: {
+    label: 'Oferta',
+    badge: 'bg-blue-50 text-blue-800 border-blue-300',
+    dot: 'bg-blue-500',
+  },
+  HIRED: {
+    label: 'Contratado',
+    badge: 'bg-emerald-50 text-emerald-800 border-emerald-300',
+    dot: 'bg-emerald-500',
+  },
+  REJECTED: {
+    label: 'Descartado',
+    badge: 'bg-rose-50 text-rose-800 border-rose-300',
+    dot: 'bg-rose-500',
+  },
+};
+
 interface CandidateApp {
   id: string;
   status: string;
+  stage?: string;
+  recruiterNotes?: string | null;
   candidate: {
     id: string;
     fullName: string;
@@ -236,11 +277,86 @@ export default function VacancyDetailClient({ vacancy: initialVacancy }: Vacancy
     }
   };
 
+  // Stage management & recruiter notes state
+  const [stageFilter, setStageFilter] = useState<
+    'ALL' | 'APPLIED' | 'REVIEWING' | 'INTERVIEW' | 'OFFER' | 'HIRED' | 'REJECTED'
+  >('ALL');
+  const [updatingAppId, setUpdatingAppId] = useState<string | null>(null);
+  const [notesModal, setNotesModal] = useState<{
+    applicationId: string;
+    candidateName: string;
+    fileName?: string;
+    stage: string;
+    notes: string;
+  } | null>(null);
+  const [savingNotes, setSavingNotes] = useState(false);
+
+  // Stage change handler
+  const handleUpdateStage = async (applicationId: string, newStage: string) => {
+    setUpdatingAppId(applicationId);
+    try {
+      const res = await fetch(`/api/applications/${applicationId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stage: newStage }),
+      });
+      if (res.ok) {
+        setVacancy((prev) => ({
+          ...prev,
+          applications: prev.applications.map((app) =>
+            app.id === applicationId ? { ...app, stage: newStage } : app
+          ),
+        }));
+      }
+    } catch (err) {
+      console.error('Error updating stage:', err);
+    } finally {
+      setUpdatingAppId(null);
+    }
+  };
+
+  // Recruiter notes save handler
+  const handleSaveNotes = async () => {
+    if (!notesModal) return;
+    setSavingNotes(true);
+    try {
+      const res = await fetch(`/api/applications/${notesModal.applicationId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          stage: notesModal.stage,
+          recruiterNotes: notesModal.notes,
+        }),
+      });
+      if (res.ok) {
+        setVacancy((prev) => ({
+          ...prev,
+          applications: prev.applications.map((app) =>
+            app.id === notesModal.applicationId
+              ? { ...app, stage: notesModal.stage, recruiterNotes: notesModal.notes }
+              : app
+          ),
+        }));
+        setNotesModal(null);
+      }
+    } catch (err) {
+      console.error('Error saving notes:', err);
+    } finally {
+      setSavingNotes(false);
+    }
+  };
+
   // Sort applications by overallScore descending
   const sortedApplications = [...vacancy.applications].sort((a, b) => {
     const scoreA = a.evaluation?.overallScore ?? -1;
     const scoreB = b.evaluation?.overallScore ?? -1;
     return scoreB - scoreA;
+  });
+
+  // Filter applications by pipeline stage
+  const displayedApplications = sortedApplications.filter((app) => {
+    if (stageFilter === 'ALL') return true;
+    return (app.stage || 'APPLIED') === stageFilter;
   });
 
   const pendingCount = vacancy.applications.filter((a) => a.status === 'PENDING').length;
@@ -583,7 +699,7 @@ export default function VacancyDetailClient({ vacancy: initialVacancy }: Vacancy
 
       {/* Candidate Leaderboard Table */}
       <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm overflow-hidden">
-        <div className="p-6 border-b border-slate-100 flex items-center justify-between gap-4">
+        <div className="p-6 border-b border-slate-100 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
             <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-blue-600" />
@@ -594,16 +710,97 @@ export default function VacancyDetailClient({ vacancy: initialVacancy }: Vacancy
             </p>
           </div>
 
-          <span className="text-xs text-slate-400 font-mono">
-            Total: {vacancy.applications.length} registros
-          </span>
+          {/* Stage Filter Tabs */}
+          <div className="flex flex-wrap items-center gap-1.5 p-1 bg-slate-100 rounded-2xl border border-slate-200 text-xs">
+            <button
+              type="button"
+              onClick={() => setStageFilter('ALL')}
+              className={`px-2.5 py-1 rounded-xl font-bold transition-all ${
+                stageFilter === 'ALL'
+                  ? 'bg-white text-blue-700 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Todos ({sortedApplications.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setStageFilter('APPLIED')}
+              className={`px-2.5 py-1 rounded-xl font-bold transition-all ${
+                stageFilter === 'APPLIED'
+                  ? 'bg-white text-slate-800 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Postulados ({sortedApplications.filter((a) => (a.stage || 'APPLIED') === 'APPLIED').length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setStageFilter('REVIEWING')}
+              className={`px-2.5 py-1 rounded-xl font-bold transition-all ${
+                stageFilter === 'REVIEWING'
+                  ? 'bg-white text-amber-800 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              En Revisión ({sortedApplications.filter((a) => a.stage === 'REVIEWING').length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setStageFilter('INTERVIEW')}
+              className={`px-2.5 py-1 rounded-xl font-bold transition-all ${
+                stageFilter === 'INTERVIEW'
+                  ? 'bg-white text-purple-800 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Entrevista ({sortedApplications.filter((a) => a.stage === 'INTERVIEW').length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setStageFilter('OFFER')}
+              className={`px-2.5 py-1 rounded-xl font-bold transition-all ${
+                stageFilter === 'OFFER'
+                  ? 'bg-white text-blue-800 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Oferta ({sortedApplications.filter((a) => a.stage === 'OFFER').length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setStageFilter('HIRED')}
+              className={`px-2.5 py-1 rounded-xl font-bold transition-all ${
+                stageFilter === 'HIRED'
+                  ? 'bg-white text-emerald-800 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Contratado ({sortedApplications.filter((a) => a.stage === 'HIRED').length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setStageFilter('REJECTED')}
+              className={`px-2.5 py-1 rounded-xl font-bold transition-all ${
+                stageFilter === 'REJECTED'
+                  ? 'bg-white text-rose-800 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Descartado ({sortedApplications.filter((a) => a.stage === 'REJECTED').length})
+            </button>
+          </div>
         </div>
 
-        {sortedApplications.length === 0 ? (
+        {displayedApplications.length === 0 ? (
           <div className="p-12 text-center text-slate-400">
             <FileText className="w-10 h-10 mx-auto mb-2 text-slate-300" />
-            <p className="text-sm font-medium">No hay candidatos cargados para esta vacante.</p>
-            <p className="text-xs mt-1">Sube archivos PDF en el cuadro superior para comenzar.</p>
+            <p className="text-sm font-medium">No hay candidatos en este estado para esta vacante.</p>
+            <p className="text-xs mt-1">
+              {stageFilter !== 'ALL'
+                ? 'Prueba seleccionando la pestaña "Todos" o cambiando la etapa de algún candidato.'
+                : 'Sube archivos PDF en el cuadro superior para comenzar.'}
+            </p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -613,7 +810,8 @@ export default function VacancyDetailClient({ vacancy: initialVacancy }: Vacancy
                   <th className="py-3 px-4 w-12 text-center">#</th>
                   <th className="py-3 px-4">Candidato & Documento</th>
                   <th className="py-3 px-4 text-center">Idioma</th>
-                  <th className="py-3 px-4 text-center">Estado</th>
+                  <th className="py-3 px-4 text-center">Etapa Selección</th>
+                  <th className="py-3 px-4 text-center">Estado JEV</th>
                   <th className="py-3 px-4 text-center">Recomendación</th>
                   <th className="py-3 px-4 text-center">Score JEV (0-4)</th>
                   <th className="py-3 px-4 text-center">Confianza</th>
@@ -622,7 +820,7 @@ export default function VacancyDetailClient({ vacancy: initialVacancy }: Vacancy
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-sm">
-                {sortedApplications.map((app, index) => {
+                {displayedApplications.map((app, index) => {
                   const evalData = app.evaluation;
                   const isEvaluated = evalData !== null && evalData !== undefined;
                   const passed =
@@ -663,6 +861,29 @@ export default function VacancyDetailClient({ vacancy: initialVacancy }: Vacancy
                             {app.cvDocument.detectedLanguage?.toUpperCase() || 'NO-ENG'}
                           </span>
                         )}
+                      </td>
+
+                      {/* Stage Selector */}
+                      <td className="py-4 px-4 text-center">
+                        <div className="inline-flex items-center">
+                          <select
+                            value={app.stage || 'APPLIED'}
+                            disabled={updatingAppId === app.id}
+                            onChange={(e) => handleUpdateStage(app.id, e.target.value)}
+                            className={`text-xs font-bold px-2.5 py-1 rounded-xl border transition-all cursor-pointer shadow-sm outline-none focus:ring-2 focus:ring-blue-500/20 disabled:opacity-50 ${
+                              STAGE_CONFIG[app.stage || 'APPLIED']?.badge ||
+                              'bg-slate-100 text-slate-700 border-slate-300'
+                            }`}
+                            title="Cambiar etapa de selección del candidato"
+                          >
+                            <option value="APPLIED">📋 Postulado</option>
+                            <option value="REVIEWING">🔍 En Revisión</option>
+                            <option value="INTERVIEW">🎙️ Entrevista</option>
+                            <option value="OFFER">💼 Oferta</option>
+                            <option value="HIRED">🎉 Contratado</option>
+                            <option value="REJECTED">🚫 Descartado</option>
+                          </select>
+                        </div>
                       </td>
 
                       {/* Status */}
@@ -755,6 +976,33 @@ export default function VacancyDetailClient({ vacancy: initialVacancy }: Vacancy
                       {/* Actions */}
                       <td className="py-4 px-4 text-right">
                         <div className="flex items-center justify-end gap-2">
+                          {/* Recruiter Notes Button */}
+                          <button
+                            onClick={() =>
+                              setNotesModal({
+                                applicationId: app.id,
+                                candidateName: app.candidate.fullName,
+                                fileName: app.cvDocument.fileName,
+                                stage: app.stage || 'APPLIED',
+                                notes: app.recruiterNotes || '',
+                              })
+                            }
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg border transition-all ${
+                              app.recruiterNotes
+                                ? 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100 font-bold shadow-sm'
+                                : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                            }`}
+                            title={
+                              app.recruiterNotes
+                                ? `Notas internas guardadas: ${app.recruiterNotes.slice(0, 35)}...`
+                                : 'Agregar notas de reclutador'
+                            }
+                          >
+                            <MessageSquare className="w-3.5 h-3.5" />
+                            <span>{app.recruiterNotes ? 'Nota ✓' : 'Nota'}</span>
+                          </button>
+
+                          {/* Ver CV Button */}
                           <button
                             onClick={() => {
                               const mappedEvaluation = app.evaluation
@@ -776,7 +1024,7 @@ export default function VacancyDetailClient({ vacancy: initialVacancy }: Vacancy
                               });
                             }}
                             className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-blue-700 border border-slate-200 transition-colors"
-                            title="Ver documento CV extraído y evaluación"
+                            title="Ver documento CV extraído y evaluación JEV"
                           >
                             <Eye className="w-3.5 h-3.5" />
                             <span>Ver CV</span>
@@ -812,6 +1060,113 @@ export default function VacancyDetailClient({ vacancy: initialVacancy }: Vacancy
         isOpen={showCriteriaModal}
         onClose={() => setShowCriteriaModal(false)}
       />
+
+      {/* Recruiter Notes Modal */}
+      {notesModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-lg overflow-hidden animate-scaleUp">
+            <div className="p-6 border-b border-slate-100 flex items-start justify-between gap-4">
+              <div>
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200 mb-2">
+                  <MessageSquare className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Revisión Humana • Notas del Reclutador</span>
+                </div>
+                <h3 className="text-xl font-black text-slate-900">
+                  {notesModal.candidateName}
+                </h3>
+                <p className="text-xs text-slate-500 font-mono mt-0.5">
+                  {notesModal.fileName || 'Currículum Vitae'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setNotesModal(null)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {/* Etapa en el modal */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                  Etapa en el Proceso de Selección:
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {Object.entries(STAGE_CONFIG).map(([key, config]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() =>
+                        setNotesModal((prev) => (prev ? { ...prev, stage: key } : null))
+                      }
+                      className={`px-3 py-2 rounded-xl text-xs font-bold border transition-all text-center flex items-center justify-center gap-1.5 ${
+                        notesModal.stage === key
+                          ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-500/20'
+                          : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      <span>{config.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Textarea for recruiter notes */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Observaciones Internas:
+                  </label>
+                  <span className="text-[11px] text-slate-400 font-mono">
+                    {notesModal.notes.length} caracteres
+                  </span>
+                </div>
+                <textarea
+                  rows={5}
+                  value={notesModal.notes}
+                  onChange={(e) =>
+                    setNotesModal((prev) =>
+                      prev ? { ...prev, notes: e.target.value } : null
+                    )
+                  }
+                  placeholder="Ej: Candidato sólido en TypeScript y arquitectura. Agendar entrevista técnica para el jueves. Pretensión salarial: $4,500 USD..."
+                  className="w-full p-3.5 text-sm rounded-2xl border border-slate-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none text-slate-800 placeholder:text-slate-400 resize-none transition-all"
+                />
+              </div>
+            </div>
+
+            <div className="p-6 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setNotesModal(null)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-200 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={savingNotes}
+                onClick={handleSaveNotes}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md shadow-blue-500/20 transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50"
+              >
+                {savingNotes ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Guardando...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Guardar Notas & Etapa</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

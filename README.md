@@ -1,86 +1,166 @@
-# 🚀 CV Evaluator - Batch Processing & Real-Time Leaderboard (TypeSafe AI JEV)
+# 🚀 JEV CV Evaluator Enterprise — Fase 1
 
-Plataforma de evaluación masiva de currículums (Batch Processing) y **Tabla Clasificatoria (Leaderboard)** en tiempo real, diseñada con **Next.js (App Router)**, **TypeScript**, **Tailwind CSS Puro** y **TypeSafe AI (JEV)** para filtrar candidatos al perfil de **Full-Stack Web Developer**.
+Sistema empresarial de evaluación determinista de currículums técnicos impulsado por **TypeSafe AI (JEV - System One Discriminative Model)**, **Next.js 14 (App Router)**, **PostgreSQL 16**, **Prisma ORM** y **Tailwind CSS**.
+
+Permite a los equipos de reclutamiento gestionar múltiples convocatorias técnicas en paralelo, procesar cientos de currículums en PDF (en inglés), aplicar rúbricas ordinales configurables (0–4.0 pts), registrar notas internas y controlar el funnel de selección de candidatos con un costo de inferencia real de solo **$0.042 / 1M tokens**.
 
 ---
 
-## 🏛️ Arquitectura del Sistema
+## 🌟 Características Principales (Fase 1 Completada)
+
+1. **Evaluación Determinista con TypeSafe AI (`jev-1.13.0`):**
+   - Sin simulaciones ni textos alucinados: juicios numéricos puros en escala ordinal (0 a 4), distribución de probabilidades por clase, nivel de confianza estadística y comprobaciones binarias (Seniority, Hands-on, Producción).
+   - Tarificación oficial verificada: **$0.042 por millón de tokens de entrada** (tokens de salida gratuitos). Un CV típico (~2,000 tokens) cuesta aproximadamente **$0.000084 USD**.
+
+2. **Gestión de Procesos y Convocatorias de Selección:**
+   - Creación de vacantes con pesos personalizados por dimensión: **Skills Técnicas**, **Experiencia en Producción**, **Educación/Fundamentos**, y **Liderazgo/Propiedad**.
+   - Umbral de corte configurable (por defecto 2.5 / 4.0).
+   - Control de ciclo de vida del proceso: **Activo** (admite CVs y evaluaciones), **Pausado** (en espera temporal), y **Cerrado / Inactivo** (solo lectura protegido).
+   - Filtros de estado en tiempo real en la cabina de control principal.
+
+3. **Ingesta Multi-PDF & Filtro de Calidad:**
+   - Carga simultánea de múltiples currículums en PDF mediante selector de archivos o *drag & drop* (optimizado para Safari y Chrome).
+   - Extracción de texto moderna en el servidor con `unpdf` (sin errores de streams binarios en PDFs modernos).
+   - Deduplicación por hash SHA-256: si un archivo ya fue cargado, se reutiliza y nunca se cobra dos veces.
+   - **Política de Idioma en Inglés:** Detección lingüística previa con `franc` y validación de stopwords; los CVs en otros idiomas se etiquetan como `WRONG_LANGUAGE` sin consumir cuota de tokens en la API de JEV.
+
+4. **Revisión Humana y Funnel de Candidatos (*Human in the Loop*):**
+   - **Selector de Etapa:** Permite avanzar a cada candidato a través del embudo de contratación (`📋 Postulado` → `🔍 En Revisión` → `🎙️ Entrevista` → `💼 Oferta` → `🎉 Contratado` → `🚫 Descartado`).
+   - **Filtros por Etapa:** Pestañas superiores para filtrar la tabla clasificatoria al instante.
+   - **Notas del Reclutador:** Modal dedicado para registrar observaciones cualitativas, feedback de entrevistas y pretensión salarial con indicador visual en la tabla.
+   - **Visor Integrado de CV y Evaluación:** Consulta el documento original extraído junto con el reporte ordinal de JEV.
+
+5. **Auditoría y Exportación:**
+   - Registro en base de datos (`AuditLog`) de cada cambio de estado, subida o evaluación.
+   - Exportación de la tabla clasificatoria a **CSV** con scores detallados, etapas y notas del reclutador.
+
+---
+
+## 🏛️ Arquitectura del Proyecto
 
 ```
 cv-evaluator/
-├── .env.local.example          # Plantilla de variables de entorno seguras
-├── .gitignore                  # Exclusión estricta de .env.local y dependencias
-├── next.config.mjs             # Configuración de Next.js
-├── package.json                # Next.js 14, React 18, Tailwind, Lucide, pdf-parse
-├── postcss.config.js           # PostCSS
-├── tailwind.config.ts          # Tailwind CSS puro (animaciones shimmer)
-├── tsconfig.json               # TypeScript con alias '@/...'
+├── docker-compose.yml             # Contenedor PostgreSQL 16 con volumen persistente
+├── prisma/
+│   ├── schema.prisma              # Modelos: Vacancy, Candidate, Application, CvDocument, Evaluation, AuditLog
+│   └── seed.ts                    # Vacantes y usuario administrador inicial
+├── sample_cvs/                    # 5 CVs de prueba en PDF (en inglés y español)
+├── storage/
+│   └── cvs/                       # Almacenamiento local de PDFs deduplicados por SHA-256
 └── src/
     ├── app/
-    │   ├── actions/
-    │   │   ├── evaluate.ts       # Server Action individual para PDF
-    │   │   └── evaluate-batch.ts # ⚡ Server Action por lotes con concurrencia controlada
-    │   ├── globals.css           # Estilos globales y máscaras shimmer
-    │   ├── layout.tsx            # Shell principal y metadatos
-    │   └── page.tsx              # 🏆 Sala de Control: Leaderboard y métricas financieras en vivo
-    ├── lib/
-    │   └── typesafe.ts           # 🤖 Cliente centralizado de TypeSafe AI (JEV)
-    ├── mocks/
-    │   └── candidates.ts         # 📦 Dataset con 15 candidatos técnicos heterogéneos
-    └── types/
-        └── evaluation.ts         # 📐 Esquemas 't' e interfaces TypeScript
+    │   ├── page.tsx               # Cockpit ejecutivo con KPIs y listado de vacantes
+    │   ├── vacantes/
+    │   │   ├── nueva/             # Formulario de creación de vacantes con pesos
+    │   │   └── [id]/              # Sala de control del proceso, Leaderboard y carga de PDFs
+    │   └── api/
+    │       ├── vacancies/         # Endpoints REST para vacantes, subida, evaluación y CSV
+    │       ├── applications/      # Endpoints PATCH para etapa y notas del reclutador
+    │       └── auth/              # Configuración NextAuth (listo para Fase 2)
+    ├── components/
+    │   ├── CVDocumentViewer.tsx   # Modal visor de CV y evaluación JEV
+    │   ├── EvaluationCriteriaModal.tsx # Guía interactiva de rúbricas ordinales
+    │   ├── Navigation.tsx         # Barra de navegación principal
+    │   └── VacanciesListWithFilter.tsx # Grid de vacantes con pestañas y selector de estado
+    └── lib/
+        ├── languageDetector.ts    # Detección local de idioma (English-only gate)
+        ├── pricing.ts             # Motor de cálculo financiero JEV ($0.042 / 1M)
+        ├── prisma.ts              # Cliente Singleton de Prisma
+        ├── storage.ts             # Almacenamiento de archivos y extracción con unpdf
+        └── typesafe.ts            # Cliente oficial del SDK de TypeSafe AI (JEV)
 ```
 
 ---
 
-## ⚡ Procesamiento por Lotes y Control de Concurrencia
+## 💰 Modelo Financiero Oficial (TypeSafe AI)
 
-El sistema procesa la lista de candidatos mediante una cola de trabajo con concurrencia controlada (`CONCURRENCY_LIMIT = 2` o `3`) para evitar superar los límites de tasa (Rate Limits) de la API de TypeSafe AI.
+A diferencia de modelos generativos estándar inflados, JEV es un modelo discriminativo de Sistema Uno:
 
-A medida que cada candidato se evalúa:
-1. **La fila transiciona** de estado *"En cola..."* o *"Analizando..."* (con shimmer skeleton `animate-pulse`) a su resultado final.
-2. **El Leaderboard se reordena reactivamente** colocando al candidato en su posición exacta según su score ponderado.
-3. **El contador gigante de gasto acumulado** suma los costos de inferencia en tiempo real (`$ USD`).
-4. **Resiliencia ante fallos individuales:** Si una llamada falla, se registra el error en la fila correspondiente y la cola continúa procesando a los demás candidatos sin interrumpir el lote.
+| Concepto | Tarifa Oficial |
+| :--- | :--- |
+| **Tokens de Entrada** | **$0.042 por millón de tokens** ($0.000000042 / token) |
+| **Tokens de Salida** | **$0.00 (Gratis)** |
+| **Costo promedio por CV** | **~$0.00008 USD** (~$0.08 USD por cada 1,000 CVs) |
 
----
-
-## 📊 Reglas de Negocio & Ponderación Técnica
-
-| Categoría | Ponderación | Criterios Evaluados |
-| :--- | :---: | :--- |
-| **Front-End Development** | **25%** | React, Next.js, TypeScript, CSS moderno, Web Vitals, SSR |
-| **Back-End Architecture** | **25%** | Node.js, Go/Python, APIs REST/GraphQL, Autenticación, Concurrencia |
-| **Base de Datos & Persistencia** | **15%** | PostgreSQL, Redis, ORMs (Prisma/Drizzle), Indexación, SQL |
-| **DevOps & Cloud** | **15%** | Docker, Kubernetes, CI/CD, AWS/GCP, Automatización |
-| **Impacto de Negocio & Liderazgo** | **20%** | Métricas de impacto, arquitectura de producto, liderazgo |
-
-- **Umbral de Calificación:** Score $\ge 70$ puntos $\rightarrow$ **PASA A ENTREVISTA** (Verde).
-- **No Califica:** Score $< 70$ puntos $\rightarrow$ **RECHAZADO** (Rojo).
+$$\text{Costo USD} = \frac{\text{Tokens de Entrada} \times 0.042}{1,000,000}$$
 
 ---
 
-## 💰 Métrica Financiera
+## 🚀 Puesta en Marcha (Desarrollo Local)
 
-El costo de cada consulta se calcula con base en tokens reales o heurística BPE (precios de referencia gpt-4o / TypeSafe AI tier):
-- Entrada: **$2.50 / 1M tokens** ($0.0000025 / token)
-- Salida: **$10.00 / 1M tokens** ($0.0000100 / token)
+### 1. Requisitos Previos
+- **Node.js** v18+ (recomendado v20+)
+- **Docker & Docker Compose** (para PostgreSQL)
+- **API Key de TypeSafe AI**
 
-$$\text{Costo Total} = \sum_{i=1}^{N} \left( \frac{\text{PromptTokens}_i \times \$2.50}{1,000,000} + \frac{\text{CompTokens}_i \times \$10.00}{1,000,000} \right)$$
+### 2. Configurar Variables de Entorno
+Crea o verifica tu archivo `.env.local` en la raíz del proyecto:
 
----
+```env
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/cv_evaluator?schema=public"
+NEXTAUTH_URL="http://localhost:3000"
+NEXTAUTH_SECRET="tu-clave-secreta-para-sesiones-jwt"
+TYPESAFE_API_KEY="tu_api_key_de_typesafe"
+JEV_INPUT_PRICE_PER_M="0.042"
+```
 
-## 🚀 Puesta en Marcha
+### 3. Levantar la Base de Datos PostgreSQL
+Inicia el contenedor de PostgreSQL con Docker Compose:
 
 ```bash
-# 1. Instalar dependencias
-npm install
+docker compose up -d
+```
 
-# 2. Configurar variables de entorno (opcional si pruebas en modo demo)
-cp .env.local.example .env.local
+### 4. Sincronizar Prisma y Cargar Datos Iniciales
+Aplica el esquema a la base de datos y genera el cliente de Prisma:
 
-# 3. Iniciar en desarrollo
+```bash
+npx prisma db push
+```
+
+*(Opcional) Cargar vacante inicial de demostración:*
+```bash
+node --env-file=.env.local ./node_modules/.bin/tsx prisma/seed.ts
+```
+
+### 5. Iniciar la Aplicación en Modo Desarrollo
+```bash
 npm run dev
 ```
 
-Visita [http://localhost:3000](http://localhost:3000) y pulsa **"Iniciar Procesamiento por Lote"**.
+Abre en tu navegador: [http://localhost:3000](http://localhost:3000)
+
+---
+
+## 🧪 Cómo Probar el Flujo Completo
+
+1. **Explorar el Cockpit (`/`):**
+   - Revisa las vacantes disponibles y utiliza los filtros (`Todos`, `Activos`, `Pausados`, `Cerrados`).
+   - Puedes cambiar el estado de cualquier proceso directamente desde la tarjeta.
+
+2. **Entrar a una Vacante (`/vacantes/[id]`):**
+   - Arrastra uno o varios currículums en PDF a la zona de carga (puedes usar los archivos de ejemplo en `sample_cvs/`).
+   - Si cargas un CV en español, el sistema lo detectará automáticamente y lo marcará como `NO-ENG` sin cobrar nada.
+
+3. **Ejecutar la Evaluación con JEV:**
+   - Haz clic en **"Iniciar Evaluación"**.
+   - El sistema enviará el texto extraído al modelo `jev-1.13.0`, calculará el score ordinal y ordenará a los candidatos de mayor a menor puntaje.
+
+4. **Gestión Humana y Notas:**
+   - En la columna **Etapa Selección**, cambia el estado del candidato (ej: pasa de `Postulado` a `Entrevista`).
+   - Haz clic en el botón **"Nota"** para abrir el panel de notas internas del reclutador y guardar observaciones.
+   - Pulsa **"Ver CV"** para inspeccionar el texto extraído y el desglose de confianza y dimensiones evaluadas por JEV.
+
+5. **Exportar Resultados:**
+   - Haz clic en **"Exportar CSV"** en la parte superior para descargar el reporte consolidado con candidatos, puntajes, etapas y notas.
+
+---
+
+## 🔒 Nota sobre Autenticación (Fase 1 vs Fase 2)
+
+En esta **Fase 1**, la autenticación con NextAuth y la tabla de usuarios (`User`) están completamente configuradas a nivel de backend y base de datos (usuario inicial: `admin@reclutamiento.com` / `admin123`). Sin embargo, el bloqueo estricto de rutas (`middleware.ts`) se mantiene opcional para permitir una evaluación y prueba ágil sin fricción. La activación obligatoria de roles y permisos finos está programada para la **Fase 2**.
+
+---
+
+## 📄 Licencia y Créditos
+Desarrollado con TypeSafe AI System One SDK. Todos los derechos reservados.

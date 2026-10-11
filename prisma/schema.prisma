@@ -28,6 +28,15 @@ enum ApplicationStatus {
   ACCEPTED
 }
 
+enum ApplicationStage {
+  APPLIED       // Postulado
+  REVIEWING     // En Revisión
+  INTERVIEW     // Entrevista
+  OFFER         // Oferta
+  HIRED         // Contratado
+  REJECTED      // Descartado
+}
+
 enum EvaluationStatus {
   SUCCESS
   FAILED
@@ -116,8 +125,10 @@ model Application {
   candidate    Candidate         @relation(fields: [candidateId], references: [id], onDelete: Cascade)
   cvDocumentId String
   cvDocument   CvDocument        @relation(fields: [cvDocumentId], references: [id], onDelete: Cascade)
-  status       ApplicationStatus @default(PENDING)
-  evaluation   Evaluation?
+  status         ApplicationStatus @default(PENDING)
+  stage          ApplicationStage  @default(APPLIED)
+  recruiterNotes String?           @db.Text
+  evaluation     Evaluation?
   jobQueue     JobQueue?
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt

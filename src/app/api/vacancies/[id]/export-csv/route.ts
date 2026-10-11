@@ -37,6 +37,7 @@ export async function GET(
       [
         'Rank',
         'Candidate Name',
+        'Stage',
         'Status',
         'Recommendation',
         'Overall Score (0-4)',
@@ -49,6 +50,7 @@ export async function GET(
         'Input Tokens',
         'Cost USD',
         'Detected Language',
+        'Recruiter Notes',
         'Evaluated Date',
       ].join(',')
     );
@@ -57,6 +59,7 @@ export async function GET(
       const evalData = app.evaluation;
       const rank = evalData ? (index + 1).toString() : '-';
       const name = `"${app.candidate.fullName.replace(/"/g, '""')}"`;
+      const stage = app.stage || 'APPLIED';
       const status = app.status;
       const recommendation = evalData?.recommendation || '-';
       const overallScore = evalData ? evalData.overallScore.toFixed(2) : '-';
@@ -69,12 +72,14 @@ export async function GET(
       const tokens = evalData ? evalData.inputTokens.toString() : '0';
       const cost = evalData ? `$${evalData.costUsd.toFixed(6)}` : '$0.00';
       const lang = app.cvDocument.detectedLanguage || 'eng';
+      const notes = `"${(app.recruiterNotes || '').replace(/"/g, '""')}"`;
       const date = evalData ? evalData.createdAt.toISOString().split('T')[0] : '-';
 
       csvRows.push(
         [
           rank,
           name,
+          stage,
           status,
           recommendation,
           overallScore,
@@ -87,6 +92,7 @@ export async function GET(
           tokens,
           cost,
           lang,
+          notes,
           date,
         ].join(',')
       );
