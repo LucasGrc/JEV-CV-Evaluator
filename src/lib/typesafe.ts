@@ -3,8 +3,8 @@
  * TypeSafe AI (JEV) - Client Module & System One Invocation Engine
  * ==============================================================================
  * Utiliza el SDK oficial `@typesafe-ai/sdk` para enviar estado y preguntas tipadas
- * a JEV (System One). Incluye gestión de credenciales seguras de servidor y
- * motor de fallback determinista para pruebas inmediatas en sandbox.
+ * a JEV (System One).
+ * Tarifas oficiales JEV: $0.042 por 1,000,000 tokens de entrada; tokens de salida gratis.
  * ==============================================================================
  */
 
@@ -14,6 +14,8 @@ import {
   CVEvaluationQuestionsType,
   SeniorityLevel,
 } from '@/types/evaluation';
+import { detectLanguage } from '@/lib/languageDetector';
+import { calculateJevCostUsd } from '@/lib/pricing';
 
 export interface SystemOneEvaluationResponse {
   answers: {
@@ -30,8 +32,10 @@ export interface SystemOneEvaluationResponse {
     input_tokens: number;
     output_tokens: number;
     total_tokens: number;
+    cost_usd: number;
   };
   model: string;
+  isSimulated?: boolean;
 }
 
 export class TypeSafeEngine {
@@ -45,19 +49,33 @@ export class TypeSafeEngine {
 
     this.hasApiKey = Boolean(
       apiKey &&
-      apiKey !== 'tsa_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxx' &&
+      apiKey !== 'tsa_live_tu_api_key_aqui' &&
       !apiKey.includes('tu_api_key')
     );
 
     this.client = new TypeSafeClient({
-      apiKey: apiKey || 'dummy-key-for-local-sandbox',
+      apiKey: apiKey || 'unconfigured-api-key',
     });
   }
 
   /**
    * Ejecuta la evaluación del CV con el modelo System One (JEV)
+   * 1. Verifica política de idioma (Inglés obligatorio)
+   * 2. Envía estado y preguntas a JEV
+   * 3. Calcula costo financiero exacto ($0.042/1M input tokens)
    */
-  async evaluateResume(cvText: string): Promise<SystemOneEvaluationResponse> {
+  async evaluateResume(cvText: string, options: { bypassLanguageCheck?: boolean } = {}): Promise<SystemOneEvaluationResponse> {
+    // 1. Language policy check (English only)
+    if (!options.bypassLanguageCheck) {
+      const langCheck = await detectLanguage(cvText);
+      if (!langCheck.isEnglish) {
+        throw new Error(
+          `LANGUAGE_POLICY_VIOLATION: Document is in '${langCheck.language}'. ${langCheck.reason || 'Company policy requires resumes in English.'}`
+        );
+      }
+    }
+
+    // 2. Real API invocation via @typesafe-ai/sdk
     if (this.hasApiKey) {
       try {
         const response = await this.client.systemOne<CVEvaluationQuestionsType>({
@@ -66,6 +84,10 @@ export class TypeSafeEngine {
           },
           questions: CV_EVALUATION_QUESTIONS,
         });
+
+        const inputTokens = response.usage.input_tokens || Math.ceil(cvText.length / 3.8);
+        const outputTokens = response.usage.output_tokens || 0;
+        const costUsd = calculateJevCostUsd(inputTokens, outputTokens);
 
         return {
           answers: {
@@ -101,101 +123,24 @@ export class TypeSafeEngine {
             },
           },
           usage: {
-            input_tokens: response.usage.input_tokens,
-            output_tokens: response.usage.output_tokens,
-            total_tokens: response.usage.input_tokens + response.usage.output_tokens,
+            input_tokens: inputTokens,
+            output_tokens: outputTokens,
+            total_tokens: inputTokens + outputTokens,
+            cost_usd: costUsd,
           },
-          model: response.model || 'jev-1',
+          model: response.model || 'jev-1.13.0',
+          isSimulated: false,
         };
       } catch (error: any) {
-        console.warn(
-          '[TypeSafeEngine] Invocación remota falló, aplicando evaluador determinista:',
-          error.message
-        );
+        console.error('[TypeSafeEngine] JEV API invocation failed:', error.message);
+        throw new Error(`JEV_INVOCATION_ERROR: ${error.message}`);
       }
     }
 
-    // Fallback determinista en ausencia de API Key (Sandbox)
-    return this.simulateSystemOne(cvText);
-  }
-
-  /**
-   * Simulación calibrada de System One basada en el análisis semántico del CV
-   */
-  private simulateSystemOne(cvText: string): SystemOneEvaluationResponse {
-    const lower = cvText.toLowerCase();
-
-    // 1. Front-End Depth (Score 0 a 4)
-    let feScore = 1.0;
-    if (lower.includes('next.js') || lower.includes('app router')) feScore += 1.2;
-    if (lower.includes('typescript') || lower.includes('react')) feScore += 1.0;
-    if (lower.includes('tailwind') || lower.includes('web vitals')) feScore += 0.8;
-    feScore = Math.min(4.0, Math.max(0.4, Number(feScore.toFixed(2))));
-
-    // 2. Back-End Depth (Score 0 a 4)
-    let beScore = 0.8;
-    if (lower.includes('node.js') || lower.includes('express') || lower.includes('nest')) beScore += 1.3;
-    if (lower.includes('rest') || lower.includes('graphql') || lower.includes('api')) beScore += 0.9;
-    if (lower.includes('go') || lower.includes('python') || lower.includes('microservicios')) beScore += 1.0;
-    beScore = Math.min(4.0, Math.max(0.4, Number(beScore.toFixed(2))));
-
-    // 3. Database Depth (Score 0 a 4)
-    let dbScore = 0.6;
-    if (lower.includes('postgres') || lower.includes('sql')) dbScore += 1.4;
-    if (lower.includes('prisma') || lower.includes('drizzle') || lower.includes('orm')) dbScore += 1.0;
-    if (lower.includes('redis') || lower.includes('sharding') || lower.includes('index')) dbScore += 1.0;
-    dbScore = Math.min(4.0, Math.max(0.2, Number(dbScore.toFixed(2))));
-
-    // 4. DevOps & Cloud (Score 0 a 4)
-    let devopsScore = 0.5;
-    if (lower.includes('docker') || lower.includes('container')) devopsScore += 1.4;
-    if (lower.includes('kubernetes') || lower.includes('k8s')) devopsScore += 1.1;
-    if (lower.includes('ci/cd') || lower.includes('github actions') || lower.includes('aws')) devopsScore += 1.0;
-    devopsScore = Math.min(4.0, Math.max(0.2, Number(devopsScore.toFixed(2))));
-
-    // 5. Business Impact (Score 0 a 4)
-    let bizScore = 1.0;
-    if (lower.includes('lead') || lower.includes('lider') || lower.includes('mentor')) bizScore += 1.2;
-    if (lower.includes('scale') || lower.includes('revenue') || lower.includes('optimiz')) bizScore += 1.0;
-    if (lower.includes('kpi') || lower.includes('churn') || lower.includes('arquitectura')) bizScore += 0.8;
-    bizScore = Math.min(4.0, Math.max(0.5, Number(bizScore.toFixed(2))));
-
-    // Choice: Seniority
-    let seniority: SeniorityLevel = 'Semi-Senior';
-    if (lower.includes('staff') || lower.includes('principal') || lower.includes('architect')) {
-      seniority = 'Lead / Staff';
-    } else if (lower.includes('senior') || feScore + beScore >= 6.5) {
-      seniority = 'Senior';
-    } else if (lower.includes('junior') || lower.includes('bootcamp')) {
-      seniority = 'Junior';
-    }
-
-    // Nouls
-    const hasDocker = lower.includes('docker') || lower.includes('kubernetes') ? 0.94 : 0.08;
-    const hasModern = lower.includes('react') && lower.includes('typescript') ? 0.96 : 0.15;
-
-    // Tokens
-    const inputTokens = Math.max(1, Math.ceil(cvText.length / 3.8));
-    const outputTokens = 140; // Token footprint estándar de System One answers
-
-    return {
-      answers: {
-        frontend_depth: { score: feScore, confidence: 0.92 },
-        backend_depth: { score: beScore, confidence: 0.89 },
-        database_depth: { score: dbScore, confidence: 0.91 },
-        devops_cloud: { score: devopsScore, confidence: 0.94 },
-        business_impact: { score: bizScore, confidence: 0.86 },
-        seniority_level: { choice: seniority, confidence: 0.88 },
-        has_containerization: { noul: hasDocker },
-        has_modern_stack: { noul: hasModern },
-      },
-      usage: {
-        input_tokens: inputTokens,
-        output_tokens: outputTokens,
-        total_tokens: inputTokens + outputTokens,
-      },
-      model: 'jev-1-system-one',
-    };
+    // Si no hay API key configurada, lanzar error explícito indicando la necesidad de credenciales
+    throw new Error(
+      'MISSING_TYPESAFE_API_KEY: Set TYPESAFE_API_KEY in .env.local to evaluate candidates with real JEV models.'
+    );
   }
 }
 

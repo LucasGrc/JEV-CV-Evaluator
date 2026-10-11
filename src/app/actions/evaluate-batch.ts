@@ -13,6 +13,7 @@
  */
 
 import { typeSafeEngine } from '@/lib/typesafe';
+import { formatJevCost } from '@/lib/pricing';
 import { MOCK_CANDIDATES } from '@/mocks/candidates';
 import {
   CategoryDetail,
@@ -79,11 +80,9 @@ export async function evaluateSingleCandidate(
     const passed = overallScore >= PASSING_SCORE_THRESHOLD;
     const decision: 'Pasa a Entrevista' | 'No Pasa' = passed ? 'Pasa a Entrevista' : 'No Pasa';
 
-    // 4. Estimación Financiera de Inferencia
-    const promptCost = (usage.input_tokens * 2.5) / 1_000_000;
-    const completionCost = (usage.output_tokens * 10.0) / 1_000_000;
-    const costNumeric = promptCost + completionCost;
-    const apiCost = `$${costNumeric.toFixed(4)}`;
+    // 4. Estimación Financiera con Tarifas Oficiales JEV ($0.042/1M input tokens, output gratis)
+    const apiCost = formatJevCost(usage.cost_usd);
+    const costNumeric = usage.cost_usd;
 
     // 5. Análisis de tecnologías detectadas y faltantes
     const lowerCV = candidate.cvText.toLowerCase();

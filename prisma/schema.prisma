@@ -1,0 +1,173 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  RECRUITER
+}
+
+enum VacancyStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  CLOSED
+}
+
+enum ApplicationStatus {
+  PENDING
+  PROCESSING
+  EVALUATED
+  WRONG_LANGUAGE
+  REJECTED
+  ACCEPTED
+}
+
+enum EvaluationStatus {
+  SUCCESS
+  FAILED
+  WRONG_LANGUAGE
+}
+
+enum RecommendationType {
+  TOP_CANDIDATE
+  POTENTIAL_FIT
+  NOT_RECOMMENDED
+  REVIEW_REQUIRED
+}
+
+enum JobStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+model User {
+  id           String        @id @default(cuid())
+  name         String?
+  email        String        @unique
+  password     String?
+  role         Role          @default(RECRUITER)
+  vacancies    Vacancy[]
+  evaluations  Evaluation[]
+  auditLogs    AuditLog[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
+
+model Vacancy {
+  id                 String            @id @default(cuid())
+  title              String
+  department         String
+  description        String            @db.Text
+  status             VacancyStatus     @default(ACTIVE)
+  minScoreThreshold  Float             @default(2.5)
+  weightSkills       Float             @default(0.40)
+  weightExperience   Float             @default(0.35)
+  weightEducation    Float             @default(0.15)
+  weightLeadership   Float             @default(0.10)
+  authorId           String
+  author             User              @relation(fields: [authorId], references: [id])
+  applications       Application[]
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+}
+
+model Candidate {
+  id           String         @id @default(cuid())
+  fullName     String
+  email        String?        @unique
+  phone        String?
+  linkedin     String?
+  cvDocuments  CvDocument[]
+  applications Application[]
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+}
+
+model CvDocument {
+  id               String         @id @default(cuid())
+  candidateId      String
+  candidate        Candidate      @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  fileName         String
+  fileSize         Int
+  fileHash         String         @unique
+  storagePath      String
+  mimeType         String         @default("application/pdf")
+  extractedText    String         @db.Text
+  pageCount        Int            @default(1)
+  detectedLanguage String?
+  isLanguageValid  Boolean        @default(true)
+  applications     Application[]
+  createdAt        DateTime       @default(now())
+}
+
+model Application {
+  id           String            @id @default(cuid())
+  vacancyId    String
+  vacancy      Vacancy           @relation(fields: [vacancyId], references: [id], onDelete: Cascade)
+  candidateId  String
+  candidate    Candidate         @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  cvDocumentId String
+  cvDocument   CvDocument        @relation(fields: [cvDocumentId], references: [id], onDelete: Cascade)
+  status       ApplicationStatus @default(PENDING)
+  evaluation   Evaluation?
+  jobQueue     JobQueue?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  @@unique([vacancyId, candidateId])
+}
+
+model Evaluation {
+  id                String             @id @default(cuid())
+  applicationId     String             @unique
+  application       Application        @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  evaluatorId       String?
+  evaluator         User?              @relation(fields: [evaluatorId], references: [id], onDelete: SetNull)
+  status            EvaluationStatus   @default(SUCCESS)
+  recommendation    RecommendationType
+  overallScore      Float              // 0.0 - 4.0
+  normalizedScore   Float              // 0 - 100%
+  confidence        Float              // JEV confidence probability
+  scoreSkills       Float
+  scoreExperience   Float
+  scoreEducation    Float
+  scoreLeadership   Float
+  jevRawResponses   Json               // complete logprobs, distribution, reasoning
+  inputTokens       Int
+  outputTokens      Int                @default(0)
+  costUsd           Float              // $0.042 / 1M input tokens
+  processingTimeMs  Int
+  recruiterFeedback String?            @db.Text
+  createdAt         DateTime           @default(now())
+}
+
+model JobQueue {
+  id            String       @id @default(cuid())
+  applicationId String       @unique
+  application   Application  @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  priority      Int          @default(0)
+  status        JobStatus    @default(QUEUED)
+  attempts      Int          @default(0)
+  lastError     String?      @db.Text
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+}
+
+model AuditLog {
+  id         String    @id @default(cuid())
+  userId     String?
+  user       User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action     String
+  entityType String
+  entityId   String?
+  metadata   Json?
+  createdAt  DateTime  @default(now())
+}

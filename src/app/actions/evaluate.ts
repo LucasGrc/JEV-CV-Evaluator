@@ -12,6 +12,7 @@
  */
 
 import { typeSafeEngine } from '@/lib/typesafe';
+import { formatJevCost } from '@/lib/pricing';
 import {
   CategoryDetail,
   EvaluationActionResponse,
@@ -122,11 +123,8 @@ export async function evaluateCV(formData: FormData): Promise<EvaluationActionRe
     const passed = overallScore >= PASSING_SCORE_THRESHOLD;
     const decision: 'Pasa a Entrevista' | 'No Pasa' = passed ? 'Pasa a Entrevista' : 'No Pasa';
 
-    // Estimación Financiera
-    const promptCost = (usage.input_tokens * 2.5) / 1_000_000;
-    const completionCost = (usage.output_tokens * 10.0) / 1_000_000;
-    const totalCost = promptCost + completionCost;
-    const apiCost = `$${totalCost.toFixed(4)}`;
+    // Estimación Financiera con Tarifas Oficiales JEV ($0.042/1M input tokens, output gratis)
+    const apiCost = formatJevCost(usage.cost_usd);
 
     const lowerCV = extractedText.toLowerCase();
     const techPool = [
