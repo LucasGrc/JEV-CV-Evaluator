@@ -139,6 +139,7 @@ export interface EvaluationResult {
   devopsScore: number;
   businessImpactScore: number;
   overallScore: number; // Ponderado 0 - 100
+  rawScore?: number;    // Score ordinal JEV 0.0 - 4.0
   passed: boolean;
   decision: 'Pasa a Entrevista' | 'No Pasa';
   hasContainerizationProb: number;

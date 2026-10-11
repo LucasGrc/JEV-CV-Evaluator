@@ -103,6 +103,7 @@ export function mapPrismaEvaluationToResult(
     devopsScore: devopsScore,
     businessImpactScore: bizScore,
     overallScore: Math.round(evalData.normalizedScore),
+    rawScore: Number(evalData.overallScore.toFixed(2)),
     passed,
     decision: passed ? 'Pasa a Entrevista' : 'No Pasa',
     hasContainerizationProb: raw.has_containerization?.noul ?? 0.5,

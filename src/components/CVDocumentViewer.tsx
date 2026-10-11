@@ -359,10 +359,18 @@ export function CVDocumentViewer({
                       </span>
 
                       <div className="text-right">
-                        <span className="text-2xl font-black font-mono text-slate-900">
-                          {evaluation.overallScore}
+                        <div className="flex items-baseline justify-end gap-1">
+                          <span className="text-2xl sm:text-3xl font-black font-mono text-slate-900">
+                            {(
+                              evaluation.rawScore ??
+                              (evaluation.overallScore / 100) * 4
+                            ).toFixed(2)}
+                          </span>
+                          <span className="text-sm font-bold text-slate-400">/ 4.0</span>
+                        </div>
+                        <span className="text-[11px] font-semibold text-blue-600 font-mono block">
+                          {evaluation.overallScore}% ({evaluation.overallScore} / 100 pts)
                         </span>
-                        <span className="text-xs text-slate-400">/100</span>
                       </div>
                     </div>
                   </div>

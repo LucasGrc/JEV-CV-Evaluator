@@ -519,10 +519,10 @@ export default function VacancyDetailClient({ vacancy: initialVacancy }: Vacancy
                                   : 'bg-rose-50 text-rose-700 border-rose-200'
                               }`}
                             >
-                              {evalData.overallScore.toFixed(2)}
+                              {evalData.overallScore.toFixed(2)} <span className="text-xs font-normal text-slate-400">/ 4.0</span>
                             </span>
                             <span className="text-[10px] text-slate-400 mt-0.5">
-                              {evalData.normalizedScore}% normalizado
+                              {evalData.normalizedScore}% ({Math.round(evalData.normalizedScore)} / 100)
                             </span>
                           </div>
                         ) : (

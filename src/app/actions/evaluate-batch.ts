@@ -176,6 +176,7 @@ export async function evaluateSingleCandidate(
       devopsScore,
       businessImpactScore,
       overallScore,
+      rawScore: Number((computedOverall / 25).toFixed(2)),
       passed,
       decision,
       hasContainerizationProb: answers.has_containerization.noul,
