@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import crypto from 'crypto';
+import { extractText } from 'unpdf';
 import pdfParse from 'pdf-parse';
 import { detectLanguage, LanguageDetectionResult } from '@/lib/languageDetector';
 
@@ -49,20 +50,27 @@ export async function storeAndParseCV(
     await fs.writeFile(targetPath, fileBuffer);
   }
 
-  // 3. Extract text and page count via pdf-parse
+  // 3. Extract text and page count via unpdf (fallback to pdf-parse)
   let extractedText = '';
   let pageCount = 1;
 
   try {
-    const parsed = await pdfParse(fileBuffer);
-    extractedText = parsed.text ? parsed.text.trim() : '';
-    pageCount = parsed.numpages || 1;
-  } catch (error: any) {
-    console.warn(`[storage] pdf-parse fallback for ${originalFileName}:`, error.message);
-    // Minimal fallback: extract printable ASCII / latin strings
-    const raw = fileBuffer.toString('latin1');
-    const chunks = raw.match(/[A-Za-z0-9\s.,;:'"@/()\-]{4,}/g) || [];
-    extractedText = chunks.join(' ').replace(/\s+/g, ' ').trim();
+    const unpdfResult = await extractText(new Uint8Array(fileBuffer));
+    extractedText = Array.isArray(unpdfResult.text)
+      ? unpdfResult.text.join('\n').trim()
+      : (unpdfResult.text || '').trim();
+    pageCount = unpdfResult.totalPages || 1;
+  } catch (unpdfErr: any) {
+    try {
+      const parsed = await pdfParse(fileBuffer);
+      extractedText = parsed.text ? parsed.text.trim() : '';
+      pageCount = parsed.numpages || 1;
+    } catch (fallbackErr: any) {
+      console.warn(`[storage] pdf extraction fallback for ${originalFileName}:`, fallbackErr.message);
+      const raw = fileBuffer.toString('latin1');
+      const chunks = raw.match(/[A-Za-z0-9\s.,;:'"@/()\-]{4,}/g) || [];
+      extractedText = chunks.join(' ').replace(/\s+/g, ' ').trim();
+    }
   }
 
   // 4. Verify language policy (English required for JEV)
