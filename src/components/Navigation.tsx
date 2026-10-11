@@ -2,13 +2,12 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Sparkles, Briefcase, FileText, PlusCircle, CheckCircle2 } from 'lucide-react';
+import { Sparkles, Briefcase, PlusCircle } from 'lucide-react';
 
 export default function Navigation() {
   const pathname = usePathname();
 
-  const isHome = pathname === '/';
-  const isVacancies = pathname?.startsWith('/vacantes');
+  const isHome = pathname === '/' || pathname === '/vacantes';
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-slate-200/80 bg-white/90 backdrop-blur-md">
@@ -34,17 +33,6 @@ export default function Navigation() {
             {/* Navigation Tabs */}
             <nav className="hidden md:flex items-center gap-1 ml-4 pl-4 border-l border-slate-200">
               <Link
-                href="/vacantes"
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-semibold transition-all ${
-                  isVacancies
-                    ? 'bg-blue-50 text-blue-700 border border-blue-200/60 shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                }`}
-              >
-                <Briefcase className="w-4 h-4 text-blue-600" />
-                <span>Vacantes & Procesos</span>
-              </Link>
-              <Link
                 href="/"
                 className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-semibold transition-all ${
                   isHome
@@ -52,13 +40,13 @@ export default function Navigation() {
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                 }`}
               >
-                <FileText className="w-4 h-4 text-blue-600" />
-                <span>Evaluador Rápido</span>
+                <Briefcase className="w-4 h-4 text-blue-600" />
+                <span>Vacantes & Convocatorias</span>
               </Link>
             </nav>
           </div>
 
-          {/* Right Status & Quick Action */}
+          {/* Right Status & Action */}
           <div className="flex items-center gap-3">
             <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-medium">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
@@ -67,7 +55,7 @@ export default function Navigation() {
 
             <Link
               href="/vacantes/nueva"
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs sm:text-sm shadow-sm transition-all hover:shadow active:scale-95"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs sm:text-sm shadow-sm transition-all hover:shadow active:scale-95"
             >
               <PlusCircle className="w-4 h-4" />
               <span>Nueva Vacante</span>
