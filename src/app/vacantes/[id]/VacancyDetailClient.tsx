@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
   Briefcase,
@@ -108,9 +108,24 @@ export default function VacancyDetailClient({ vacancy: initialVacancy }: Vacancy
     }
   };
 
-  // Upload handler for multiple files
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
+  const [isDragging, setIsDragging] = useState(false);
+
+  // Prevent default window drop behavior in Safari/Chrome so files don't open in browser
+  useEffect(() => {
+    const preventWindowDrop = (e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
+    window.addEventListener('dragover', preventWindowDrop);
+    window.addEventListener('drop', preventWindowDrop);
+    return () => {
+      window.removeEventListener('dragover', preventWindowDrop);
+      window.removeEventListener('drop', preventWindowDrop);
+    };
+  }, []);
+
+  // Upload handler for multiple files (works for both input selection and drag & drop)
+  const uploadFiles = async (files: FileList | File[]) => {
     if (!files || files.length === 0) return;
 
     setUploading(true);
@@ -138,8 +153,40 @@ export default function VacancyDetailClient({ vacancy: initialVacancy }: Vacancy
       setUploadNotice(`Error: ${err.message}`);
     } finally {
       setUploading(false);
-      // Reset input value
+    }
+  };
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      uploadFiles(e.target.files);
       e.target.value = '';
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      uploadFiles(e.dataTransfer.files);
     }
   };
 
@@ -290,25 +337,51 @@ export default function VacancyDetailClient({ vacancy: initialVacancy }: Vacancy
             </div>
           </div>
 
-          <label className="border-2 border-dashed border-slate-300 hover:border-blue-400 rounded-2xl p-6 flex flex-col items-center justify-center cursor-pointer transition-colors bg-slate-50/50 hover:bg-blue-50/20 group">
+          <div
+            onDragOver={handleDragOver}
+            onDragEnter={handleDragEnter}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            className={`border-2 border-dashed rounded-2xl p-6 flex flex-col items-center justify-center transition-all ${
+              isDragging
+                ? 'border-blue-600 bg-blue-50 scale-[1.01] ring-4 ring-blue-500/20 shadow-md'
+                : 'border-slate-300 hover:border-blue-400 bg-slate-50/50 hover:bg-blue-50/20'
+            }`}
+          >
             <input
               type="file"
+              id="pdf-dropzone-input"
               multiple
               accept="application/pdf"
-              onChange={handleFileUpload}
+              onChange={handleFileInputChange}
               disabled={uploading}
               className="hidden"
             />
-            <div className="w-12 h-12 rounded-xl bg-blue-100/70 text-blue-600 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
-              <FileText className="w-6 h-6" />
-            </div>
-            <span className="text-sm font-semibold text-slate-700 group-hover:text-blue-600">
-              {uploading ? 'Procesando y almacenando PDFs...' : 'Selecciona o arrastra múltiples archivos PDF aquí'}
-            </span>
-            <span className="text-xs text-slate-400 mt-1">
-              Solo PDF (en idioma inglés para evaluación JEV)
-            </span>
-          </label>
+            <label
+              htmlFor="pdf-dropzone-input"
+              className="cursor-pointer flex flex-col items-center justify-center w-full"
+            >
+              <div
+                className={`w-12 h-12 rounded-xl flex items-center justify-center mb-2 transition-all ${
+                  isDragging
+                    ? 'bg-blue-600 text-white scale-110 shadow-lg shadow-blue-500/30'
+                    : 'bg-blue-100/70 text-blue-600'
+                }`}
+              >
+                <FileText className="w-6 h-6" />
+              </div>
+              <span className="text-sm font-semibold text-slate-700">
+                {uploading
+                  ? 'Procesando y almacenando PDFs...'
+                  : isDragging
+                  ? '¡Suelta los archivos PDF aquí para cargarlos!'
+                  : 'Selecciona o arrastra múltiples archivos PDF aquí'}
+              </span>
+              <span className="text-xs text-slate-400 mt-1">
+                Compatible con Safari y Chrome (Archivos PDF en inglés)
+              </span>
+            </label>
+          </div>
         </div>
 
         {/* Evaluation Execution Card */}
