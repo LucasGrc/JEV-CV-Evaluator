@@ -213,6 +213,29 @@ export default function VacancyDetailClient({ vacancy: initialVacancy }: Vacancy
     }
   };
 
+  const [updatingStatus, setUpdatingStatus] = useState(false);
+
+  // Status management handler
+  const handleStatusChange = async (newStatus: 'ACTIVE' | 'PAUSED' | 'CLOSED') => {
+    setUpdatingStatus(true);
+    setUploadNotice(null);
+    try {
+      const res = await fetch(`/api/vacancies/${vacancy.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error actualizando estado');
+      setVacancy((prev) => ({ ...prev, status: newStatus }));
+      setUploadNotice(`✓ Estado de la vacante actualizado a: ${newStatus}`);
+    } catch (err: any) {
+      setUploadNotice(`Error: ${err.message}`);
+    } finally {
+      setUpdatingStatus(false);
+    }
+  };
+
   // Sort applications by overallScore descending
   const sortedApplications = [...vacancy.applications].sort((a, b) => {
     const scoreA = a.evaluation?.overallScore ?? -1;
@@ -263,13 +286,58 @@ export default function VacancyDetailClient({ vacancy: initialVacancy }: Vacancy
       <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm p-6 sm:p-8 mb-8">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 pb-6 border-b border-slate-100">
           <div>
-            <div className="flex items-center gap-3 mb-2">
+            <div className="flex items-center gap-3 mb-3 flex-wrap">
               <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
                 {vacancy.department}
               </span>
-              <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 uppercase">
-                {vacancy.status}
-              </span>
+
+              {/* Status Switcher Component */}
+              <div className="inline-flex items-center p-1 rounded-xl bg-slate-100 border border-slate-200 text-xs shadow-inner">
+                <button
+                  type="button"
+                  disabled={updatingStatus}
+                  onClick={() => handleStatusChange('ACTIVE')}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-bold transition-all ${
+                    vacancy.status === 'ACTIVE'
+                      ? 'bg-emerald-600 text-white shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                  }`}
+                  title="Marcar como Activo (acepta CVs y evaluaciones)"
+                >
+                  <span className={`w-2 h-2 rounded-full ${vacancy.status === 'ACTIVE' ? 'bg-white' : 'bg-emerald-500'}`} />
+                  <span>Activo</span>
+                </button>
+
+                <button
+                  type="button"
+                  disabled={updatingStatus}
+                  onClick={() => handleStatusChange('PAUSED')}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-bold transition-all ${
+                    vacancy.status === 'PAUSED'
+                      ? 'bg-amber-500 text-white shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                  }`}
+                  title="Pausar temporalmente el proceso"
+                >
+                  <span className={`w-2 h-2 rounded-full ${vacancy.status === 'PAUSED' ? 'bg-white' : 'bg-amber-400'}`} />
+                  <span>Pausado</span>
+                </button>
+
+                <button
+                  type="button"
+                  disabled={updatingStatus}
+                  onClick={() => handleStatusChange('CLOSED')}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-bold transition-all ${
+                    vacancy.status === 'CLOSED'
+                      ? 'bg-slate-700 text-white shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                  }`}
+                  title="Cerrar / Inactivar proceso"
+                >
+                  <span className={`w-2 h-2 rounded-full ${vacancy.status === 'CLOSED' ? 'bg-white' : 'bg-slate-400'}`} />
+                  <span>Cerrado / Inactivo</span>
+                </button>
+              </div>
             </div>
 
             <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
@@ -321,6 +389,55 @@ export default function VacancyDetailClient({ vacancy: initialVacancy }: Vacancy
         </div>
       </div>
 
+      {/* Status Warning Banners */}
+      {vacancy.status === 'CLOSED' && (
+        <div className="mb-6 p-5 rounded-2xl bg-slate-100 border border-slate-300 text-slate-800 text-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm animate-fadeIn">
+          <div className="flex items-center gap-3.5">
+            <div className="w-10 h-10 rounded-xl bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-lg flex-shrink-0">
+              🔒
+            </div>
+            <div>
+              <p className="font-bold text-slate-900 text-base">Proceso Cerrado / Inactivo</p>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Esta convocatoria ha finalizado. La carga de nuevos CVs y evaluaciones automáticas están bloqueadas. Puedes reactivarla cambiando su estado a &quot;Activo&quot; en cualquier momento.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            disabled={updatingStatus}
+            onClick={() => handleStatusChange('ACTIVE')}
+            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-sm flex-shrink-0 hover:scale-[1.02]"
+          >
+            Reactivar Proceso
+          </button>
+        </div>
+      )}
+
+      {vacancy.status === 'PAUSED' && (
+        <div className="mb-6 p-5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm animate-fadeIn">
+          <div className="flex items-center gap-3.5">
+            <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold text-lg flex-shrink-0">
+              ⏸️
+            </div>
+            <div>
+              <p className="font-bold text-amber-900 text-base">Proceso Pausado Temporalmente</p>
+              <p className="text-xs text-amber-700 mt-0.5">
+                La recepción de nuevos candidatos y evaluaciones con JEV está en pausa. Haz clic en Reanudar para habilitar nuevamente la convocatoria.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            disabled={updatingStatus}
+            onClick={() => handleStatusChange('ACTIVE')}
+            className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-sm flex-shrink-0 hover:scale-[1.02]"
+          >
+            Reanudar Proceso
+          </button>
+        </div>
+      )}
+
       {/* Upload & Actions Bar */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         {/* Multi-PDF Upload Card */}
@@ -338,12 +455,14 @@ export default function VacancyDetailClient({ vacancy: initialVacancy }: Vacancy
           </div>
 
           <div
-            onDragOver={handleDragOver}
-            onDragEnter={handleDragEnter}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
+            onDragOver={vacancy.status === 'ACTIVE' ? handleDragOver : undefined}
+            onDragEnter={vacancy.status === 'ACTIVE' ? handleDragEnter : undefined}
+            onDragLeave={vacancy.status === 'ACTIVE' ? handleDragLeave : undefined}
+            onDrop={vacancy.status === 'ACTIVE' ? handleDrop : undefined}
             className={`border-2 border-dashed rounded-2xl p-6 flex flex-col items-center justify-center transition-all ${
-              isDragging
+              vacancy.status !== 'ACTIVE'
+                ? 'border-slate-200 bg-slate-50 opacity-60 cursor-not-allowed'
+                : isDragging
                 ? 'border-blue-600 bg-blue-50 scale-[1.01] ring-4 ring-blue-500/20 shadow-md'
                 : 'border-slate-300 hover:border-blue-400 bg-slate-50/50 hover:bg-blue-50/20'
             }`}
@@ -354,16 +473,20 @@ export default function VacancyDetailClient({ vacancy: initialVacancy }: Vacancy
               multiple
               accept="application/pdf"
               onChange={handleFileInputChange}
-              disabled={uploading}
+              disabled={uploading || vacancy.status !== 'ACTIVE'}
               className="hidden"
             />
             <label
-              htmlFor="pdf-dropzone-input"
-              className="cursor-pointer flex flex-col items-center justify-center w-full"
+              htmlFor={vacancy.status === 'ACTIVE' ? 'pdf-dropzone-input' : undefined}
+              className={`flex flex-col items-center justify-center w-full ${
+                vacancy.status === 'ACTIVE' ? 'cursor-pointer' : 'cursor-not-allowed'
+              }`}
             >
               <div
                 className={`w-12 h-12 rounded-xl flex items-center justify-center mb-2 transition-all ${
-                  isDragging
+                  vacancy.status !== 'ACTIVE'
+                    ? 'bg-slate-200 text-slate-400'
+                    : isDragging
                     ? 'bg-blue-600 text-white scale-110 shadow-lg shadow-blue-500/30'
                     : 'bg-blue-100/70 text-blue-600'
                 }`}
@@ -371,14 +494,20 @@ export default function VacancyDetailClient({ vacancy: initialVacancy }: Vacancy
                 <FileText className="w-6 h-6" />
               </div>
               <span className="text-sm font-semibold text-slate-700">
-                {uploading
+                {vacancy.status === 'CLOSED'
+                  ? '🔒 Convocatoria Cerrada (Reactiva arriba para cargar CVs)'
+                  : vacancy.status === 'PAUSED'
+                  ? '⏸️ Convocatoria Pausada (Reanuda arriba para cargar CVs)'
+                  : uploading
                   ? 'Procesando y almacenando PDFs...'
                   : isDragging
                   ? '¡Suelta los archivos PDF aquí para cargarlos!'
                   : 'Selecciona o arrastra múltiples archivos PDF aquí'}
               </span>
               <span className="text-xs text-slate-400 mt-1">
-                Compatible con Safari y Chrome (Archivos PDF en inglés)
+                {vacancy.status === 'ACTIVE'
+                  ? 'Compatible con Safari y Chrome (Archivos PDF en inglés)'
+                  : 'Modo solo lectura para este proceso'}
               </span>
             </label>
           </div>
@@ -417,7 +546,7 @@ export default function VacancyDetailClient({ vacancy: initialVacancy }: Vacancy
 
           <button
             onClick={handleRunEvaluation}
-            disabled={evaluating || pendingCount === 0}
+            disabled={evaluating || pendingCount === 0 || vacancy.status !== 'ACTIVE'}
             className="w-full mt-6 py-3 px-4 rounded-xl bg-white hover:bg-blue-50 text-blue-700 font-bold text-sm shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-95"
           >
             {evaluating ? (
@@ -425,6 +554,10 @@ export default function VacancyDetailClient({ vacancy: initialVacancy }: Vacancy
                 <RefreshCw className="w-4 h-4 animate-spin text-blue-600" />
                 <span>Evaluando con JEV...</span>
               </>
+            ) : vacancy.status === 'CLOSED' ? (
+              <span>🔒 Proceso Cerrado</span>
+            ) : vacancy.status === 'PAUSED' ? (
+              <span>⏸️ Proceso Pausado</span>
             ) : (
               <>
                 <Play className="w-4 h-4 fill-current text-blue-600" />
