@@ -11,7 +11,8 @@
     "db:seed": "tsx prisma/seed.ts && tsx prisma/seed-100-invoices.ts",
     "db:seed:rrhh": "tsx prisma/seed.ts",
     "db:seed:finanzas": "tsx prisma/seed-100-invoices.ts",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "generate:cvs": "tsx scripts/generate-sample-cvs.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts && tsx prisma/seed-100-invoices.ts"

@@ -125,9 +125,20 @@ Abre en tu navegador:
 ### B. Demostración de Recursos Humanos (Evaluador de CVs)
 1. Entra a `http://localhost:3000` y haz clic en **"Ir a Módulo RRHH"** (o navega a `/vacantes`).
 2. Abre la vacante: **`Senior Full-Stack Engineer (Next.js & TypeScript)`**.
-3. Carga uno o varios CVs de la carpeta `sample_cvs/` (arrastra y suelta).
-4. Haz clic en **`Iniciar Evaluación`** para ver la clasificación ordinal, niveles de confianza y cálculo de costos.
+3. Carga los **10 CVs en PDF** de prueba desde la carpeta `sample_cvs/` (arrastra y suelta):
+   - `01_Alexander_Wright_Senior_FullStack.pdf`: Senior Full-Stack estrella (> 3.5 pts, Altamente recomendado).
+   - `02_Beatriz_Mendoza_Lead_Architect.pdf`: Lead Architect con gestión de equipos y arquitectura (> 3.7 pts).
+   - `03_David_Chen_Principal_Backend.pdf`: Principal Backend & Bases de Datos (~3.2 pts).
+   - `04_Elena_Rostova_Staff_DevOps.pdf`: Staff Cloud & Kubernetes (~2.8 pts).
+   - `05_Sophia_Taylor_Mid_FullStack.pdf`: Mid-Level equilibrado (~2.55 pts, supera umbral de corte 2.5).
+   - `06_Marcus_Vance_Senior_Frontend.pdf`: Experto Frontend/UI sin backend ni Docker (~2.45 pts, borde de corte).
+   - `07_Lucas_Miller_Junior_Frontend.pdf`: Junior con 10 meses de experiencia (~1.2 pts, No recomendado).
+   - `08_Robert_Kowalski_Legacy_Backend.pdf`: Java 8/PHP/SVN sin stack moderno (~1.7 pts, No recomendado).
+   - `09_Priya_Sharma_Data_Scientist.pdf`: Científica de Datos en Python no afín a Full-Stack (~0.8 pts, No recomendado).
+   - `10_Carlos_Gomez_FullStack_Espanol.pdf`: CV en español (detectado por política de idioma, etiquetado `WRONG_LANGUAGE` sin costo de tokens).
+4. Haz clic en **`Iniciar Evaluación`** para ver la clasificación ordinal, niveles de confianza y cálculo de costos en tiempo real.
 5. Gestiona las etapas de selección de los candidatos, agrega notas y descarga el reporte consolidado en **CSV**.
+6. Usa **`[ 🔄 Borrar CVs y Repetir Demo Live ]`** o la papelera `[ 🗑️ ]` para reiniciar la demo en cualquier momento.
 
 ---
 
@@ -145,12 +156,14 @@ Abre en tu navegador:
 cv-evaluator/
 ├── docker-compose.yml             # Contenedor PostgreSQL 16
 ├── .env.example                   # Plantilla de variables de entorno para clones limpios
-├── package.json                   # Scripts de ejecución, build y seed
+├── package.json                   # Scripts de ejecución, build, seed y generación de CVs
 ├── prisma/
 │   ├── schema.prisma              # Esquema unificado (RRHH + Finanzas)
 │   ├── seed.ts                    # Datos de prueba para RRHH (vacantes y admin)
 │   └── seed-100-invoices.ts       # Datos de prueba para Finanzas (100 facturas manuales)
-├── sample_cvs/                    # 5 CVs de prueba en PDF (inglés y español)
+├── sample_cvs/                    # 10 CVs en PDF para demo (diversos perfiles y casos de regla)
+├── scripts/
+│   └── generate-sample-cvs.ts     # Generador automatizado de CVs en PDF con pdf-lib
 ├── src/
 │   ├── app/
 │   │   ├── page.tsx               # Hub principal multi-módulo
