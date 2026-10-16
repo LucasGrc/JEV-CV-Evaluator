@@ -100,3 +100,57 @@ export async function PATCH(
     );
   }
 }
+
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const applicationId = params.id;
+    const application = await prisma.application.findUnique({
+      where: { id: applicationId },
+      include: { candidate: true },
+    });
+
+    if (!application) {
+      return NextResponse.json(
+        { error: 'Postulación no encontrada' },
+        { status: 404 }
+      );
+    }
+
+    const candidateId = application.candidateId;
+    const candidateName = application.candidate.fullName;
+
+    // Eliminar la postulación (en cascada elimina Evaluation y JobQueue)
+    await prisma.application.delete({
+      where: { id: applicationId },
+    });
+
+    // Limpiar candidate y cvDocument si no tienen otras aplicaciones
+    const remaining = await prisma.application.count({
+      where: { candidateId },
+    });
+
+    if (remaining === 0) {
+      await prisma.cvDocument.deleteMany({
+        where: { candidateId },
+      }).catch(() => {});
+      await prisma.candidate.delete({
+        where: { id: candidateId },
+      }).catch(() => {});
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: `Postulación y CV de ${candidateName} eliminados correctamente.`,
+    });
+  } catch (error: any) {
+    console.error('Error deleting application:', error);
+    return NextResponse.json(
+      { error: error.message || 'Error al eliminar postulación' },
+      { status: 500 }
+    );
+  }
+}
+
