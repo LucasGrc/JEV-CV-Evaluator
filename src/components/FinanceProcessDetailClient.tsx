@@ -477,6 +477,12 @@ export default function FinanceProcessDetailClient({ initialProcess }: ProcessDe
     0
   );
 
+  const approvedAmountSum = approvedInvoices.reduce(
+    (acc, inv) => acc + (inv.totalAmount || 0),
+    0
+  );
+  const creditFiscalBs = approvedAmountSum * 0.13;
+
   const totalJevCostUsd = process.invoices.reduce(
     (acc, inv) => acc + (inv.evaluation?.costUsd || 0),
     0
@@ -569,6 +575,9 @@ export default function FinanceProcessDetailClient({ initialProcess }: ProcessDe
             <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
               {process.title}
             </h1>
+            <p className="text-xs text-slate-500 leading-relaxed max-w-2xl">
+              Validación y auditoría inteligente de facturas físicas y manuales de descargo mensual de dependientes (RC-IVA / Formulario 110). JEV evalúa los criterios normativos factura por factura para dictaminar la aprobación o rechazo de la presentación jurada.
+            </p>
 
             {/* Employee pill */}
             <div className="inline-flex items-center gap-3 p-2.5 bg-emerald-50/70 border border-emerald-200 rounded-xl text-xs text-slate-800">
@@ -782,16 +791,18 @@ export default function FinanceProcessDetailClient({ initialProcess }: ProcessDe
           </div>
         </div>
 
-        {/* Monto Total */}
+        {/* Monto Total & Crédito Fiscal */}
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
           <div className="flex items-center justify-between text-slate-500 mb-1">
-            <span className="text-[11px] font-bold uppercase tracking-wider">Monto Total</span>
+            <span className="text-[11px] font-bold uppercase tracking-wider">Monto Presentado</span>
             <DollarSign className="w-4 h-4 text-emerald-600" />
           </div>
           <div className="text-xl sm:text-2xl font-mono font-extrabold text-slate-900">
             Bs. {totalAmountSum.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
-          <div className="text-[11px] text-slate-500 mt-1">Rendición F-110</div>
+          <div className="text-[10px] text-emerald-700 font-bold mt-1">
+            Crédito 13%: Bs. {creditFiscalBs.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </div>
         </div>
 
         {/* Costo JEV API */}

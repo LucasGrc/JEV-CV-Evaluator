@@ -178,55 +178,58 @@ const MERCHANTS = [
 ];
 
 async function main() {
-  console.log('🚀 Generando proceso de rendición con 100 facturas para demostración en tiempo real...');
+  console.log('🚀 Generando proceso: Presentación de facturas Carlos Morales Octubre 2026...');
 
-  const employeeName = 'Lic. Carlos Morales Rodríguez';
+  const employeeName = 'Carlos Morales';
   const employeeCi = '5129481 LP';
-  const periodMonth = 'Noviembre';
+  const periodMonth = 'Octubre';
   const periodYear = 2026;
+  const processTitle = 'Presentación de facturas Carlos Morales Octubre 2026';
 
-  // 1. Crear o resetear el proceso
-  let process = await prisma.invoiceProcess.findFirst({
+  // 1. Eliminar cualquier proceso previo de Carlos Morales para dejarlo 100% limpio
+  const existingProcesses = await prisma.invoiceProcess.findMany({
     where: {
       employeeCi,
-      periodMonth,
-      periodYear,
     },
     include: { invoices: true },
   });
 
-  if (process) {
-    console.log(`Eliminando facturas anteriores del proceso existente ID: ${process.id}...`);
+  for (const p of existingProcesses) {
+    console.log(`Limpiando proceso previo ID: ${p.id} (${p.title})...`);
     await prisma.invoiceEvaluation.deleteMany({
-      where: { invoice: { processId: process.id } },
+      where: { invoice: { processId: p.id } },
     });
     await prisma.invoiceDocument.deleteMany({
-      where: { processId: process.id },
+      where: { processId: p.id },
     });
-  } else {
-    process = await prisma.invoiceProcess.create({
-      data: {
-        title: 'Rendición de Gastos Operativos y Viajes (100 Facturas) - Carlos Morales',
-        description:
-          'Proceso de auditoría masiva con 100 facturas mensuales para demostración de procesamiento en tiempo real con TypeSafe AI (JEV).',
-        periodMonth,
-        periodYear,
-        employeeName,
-        employeeCi,
-        department: 'Finanzas & Tesorería',
-        maxAmountThreshold: 10000.0,
-        mathTolerance: 0.1,
-        suspiciousConcepts:
-          'Compra o instalación de ascensores, elevadores, maquinaria pesada, obras civiles de construcción a granel o activos industriales.',
-        requireStrictCiMatch: true,
-        status: 'ACTIVE',
-      },
-      include: { invoices: true },
+    await prisma.invoiceProcess.delete({
+      where: { id: p.id },
     });
-    console.log(`✓ Creado nuevo proceso: ${process.title}`);
   }
 
-  // 2. Generar 100 facturas
+  // 2. Crear el proceso de Octubre 2026
+  const process = await prisma.invoiceProcess.create({
+    data: {
+      title: processTitle,
+      description:
+        'Presentación mensual de facturas manuales y físicas de descargo (RC-IVA / Formulario 110) del dependiente Carlos Morales para validación y crédito fiscal.',
+      periodMonth,
+      periodYear,
+      employeeName,
+      employeeCi,
+      department: 'Finanzas & Tesorería',
+      maxAmountThreshold: 10000.0,
+      mathTolerance: 0.1,
+      suspiciousConcepts:
+        'Compra o instalación de ascensores, elevadores, maquinaria pesada, obras civiles de construcción a granel o activos industriales.',
+      requireStrictCiMatch: true,
+      status: 'ACTIVE',
+    },
+    include: { invoices: true },
+  });
+  console.log(`✓ Creado proceso: ${process.title}`);
+
+  // 3. Generar 100 facturas manuales
   // Casos especiales distribuidos estratégicamente para que se observen en tiempo real:
   // - Facturas con monto > 10.000 Bs (Revisión manual)
   const HIGH_AMOUNT_INDICES = [18, 37, 59, 74, 86, 92, 98];
@@ -238,14 +241,14 @@ async function main() {
   const CI_MISMATCH_INDICES = [15, 33, 54, 78];
 
   const totalInvoices = 100;
-  console.log(`Creando ${totalInvoices} facturas pendientes...`);
+  console.log(`Creando ${totalInvoices} facturas manuales pendientes para ${employeeName} (Octubre 2026)...`);
 
   for (let i = 1; i <= totalInvoices; i++) {
     const merchant = MERCHANTS[(i - 1) % MERCHANTS.length];
     const invoiceNumber = `${10000 + i * 37}`;
     const day = (i % 28) + 1;
-    const dateFormatted = `${day < 10 ? '0' + day : day}/11/2026`;
-    const fileName = `factura_${String(i).padStart(3, '0')}_${merchant.name.toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 15)}.pdf`;
+    const dateFormatted = `${day < 10 ? '0' + day : day}/10/2026`;
+    const fileName = `factura_manual_${String(i).padStart(3, '0')}_${merchant.name.toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 15)}.pdf`;
 
     let buyerName = employeeName;
     let buyerCi = employeeCi;
