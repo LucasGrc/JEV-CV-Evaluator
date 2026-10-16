@@ -57,6 +57,26 @@ enum JobStatus {
   FAILED
 }
 
+enum InvoiceProcessStatus {
+  ACTIVE
+  PAUSED
+  CLOSED
+  ARCHIVED
+}
+
+enum InvoiceDocumentStatus {
+  PENDING
+  PROCESSING
+  EVALUATED
+  ERROR
+}
+
+enum InvoiceVerdict {
+  APPROVED
+  MANUAL_REVIEW
+  REJECTED
+}
+
 model User {
   id           String        @id @default(cuid())
   name         String?
@@ -181,4 +201,93 @@ model AuditLog {
   entityId   String?
   metadata   Json?
   createdAt  DateTime  @default(now())
+}
+
+model InvoiceProcess {
+  id                    String                @id @default(cuid())
+  title                 String                // Ej: "Descargo de Gastos - Octubre 2026"
+  description           String?               @db.Text
+  periodMonth           String                // Ej: "Octubre"
+  periodYear            Int                   // Ej: 2026
+  employeeName          String                // Nombre completo del empleado que presenta el descargo
+  employeeCi            String                // Cédula de Identidad / NIT (ej. "4892182 LP")
+  department            String                @default("Finanzas")
+  
+  // Reglas configurables
+  maxAmountThreshold    Float                 @default(10000.0) // Límite en Bs para revisión manual
+  mathTolerance         Float                 @default(0.10)    // Tolerancia en Bs para suma de items
+  suspiciousConcepts    String?               @db.Text          // Conceptos no propios de persona natural
+  requireStrictCiMatch  Boolean               @default(true)
+  
+  status                InvoiceProcessStatus  @default(ACTIVE)
+  invoices              InvoiceDocument[]
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+}
+
+model InvoiceDocument {
+  id                    String                @id @default(cuid())
+  processId             String
+  process               InvoiceProcess        @relation(fields: [processId], references: [id], onDelete: Cascade)
+  
+  fileName              String
+  fileSize              Int
+  fileHash              String                // SHA-256
+  storagePath           String
+  mimeType              String                // application/pdf, image/jpeg, image/png, etc.
+  
+  // Datos extraídos de la factura
+  buyerName             String?               // Nombre / Razón Social en la factura
+  buyerCi               String?               // CI o NIT del comprador en la factura
+  invoiceNumber         String?               // Nro de factura
+  invoiceDate           String?               // Fecha de emisión
+  totalAmount           Float?                // Monto total en Bs
+  currency              String                @default("BOB")
+  items                 Json?                 // Array de { description, quantity, unitPrice, subtotal }
+  extractedText         String                @db.Text
+  
+  status                InvoiceDocumentStatus @default(PENDING)
+  evaluation            InvoiceEvaluation?
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+}
+
+model InvoiceEvaluation {
+  id                     String                @id @default(cuid())
+  invoiceId              String                @unique
+  invoice                InvoiceDocument       @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  
+  verdict                InvoiceVerdict
+  
+  // Resultados específicos de cada regla
+  identityMatch          Boolean               // ¿Coincide el nombre/CI con el empleado?
+  identityMatchScore     Float                 @default(1.0)
+  
+  mathConsistent         Boolean               // ¿La suma de los ítems coincide con el total?
+  calculatedSum          Float?                // Suma calculada de los ítems
+  declaredTotal          Float?                // Total declarado en la factura
+  sumDifference          Float?                // Diferencia absoluta
+  
+  amountAlert            Boolean               // ¿Supera el umbral (ej. 10.000 Bs)?
+  
+  suspiciousConceptAlert Boolean               // ¿Contiene conceptos no propios de persona natural?
+  suspiciousDetails      String?               @db.Text
+  
+  // Resumen del veredicto y razones
+  reasons                Json                  // Array de motivos
+  jevReasoning           String                @db.Text
+  jevRawResponse         Json?
+  
+  confidence             Float                 @default(1.0)
+  inputTokens            Int                   @default(0)
+  costUsd                Float                 @default(0.0) // $0.042 / 1M input tokens
+  processingTimeMs       Int                   @default(0)
+  
+  // Revisión humana
+  reviewerNotes          String?               @db.Text
+  reviewedAt             DateTime?
+  reviewedBy             String?
+  
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
 }
