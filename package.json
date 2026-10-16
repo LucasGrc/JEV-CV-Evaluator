@@ -8,11 +8,13 @@
     "start": "next start",
     "lint": "next lint",
     "db:push": "prisma db push",
-    "db:seed": "tsx prisma/seed.ts",
+    "db:seed": "tsx prisma/seed.ts && tsx prisma/seed-100-invoices.ts",
+    "db:seed:rrhh": "tsx prisma/seed.ts",
+    "db:seed:finanzas": "tsx prisma/seed-100-invoices.ts",
     "db:studio": "prisma studio"
   },
   "prisma": {
-    "seed": "tsx prisma/seed.ts"
+    "seed": "tsx prisma/seed.ts && tsx prisma/seed-100-invoices.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

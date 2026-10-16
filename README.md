@@ -1,166 +1,167 @@
-# 🚀 JEV CV Evaluator Enterprise — Fase 1
+# 🚀 JEV Enterprise Suite — Multi-POC (RRHH & Finanzas)
 
-Sistema empresarial de evaluación determinista de currículums técnicos impulsado por **TypeSafe AI (JEV - System One Discriminative Model)**, **Next.js 14 (App Router)**, **PostgreSQL 16**, **Prisma ORM** y **Tailwind CSS**.
+Plataforma empresarial de inteligencia artificial determinista impulsada por **TypeSafe AI (JEV - System One Discriminative Model)**, **Next.js 14 (App Router)**, **PostgreSQL 16**, **Prisma ORM** y **Tailwind CSS**.
 
-Permite a los equipos de reclutamiento gestionar múltiples convocatorias técnicas en paralelo, procesar cientos de currículums en PDF (en inglés), aplicar rúbricas ordinales configurables (0–4.0 pts), registrar notas internas y controlar el funnel de selección de candidatos con un costo de inferencia real de solo **$0.042 / 1M tokens**.
+Este repositorio contiene dos soluciones clave (*Proof of Concepts*) listas para demostración ejecutiva:
 
----
+1. **👥 Módulo RRHH — Evaluador de CVs Técnicos (`/vacantes`):**  
+   Evaluación ordinal determinista (0–4.0 pts) de currículums en PDF en inglés, detección previa de idioma, gestión de etapas del funnel de selección, notas del reclutador y exportación a CSV. Inferencia real a **$0.042 / 1M tokens** (~$0.00008 USD por CV).
 
-## 🌟 Características Principales (Fase 1 Completada)
-
-1. **Evaluación Determinista con TypeSafe AI (`jev-1.13.0`):**
-   - Sin simulaciones ni textos alucinados: juicios numéricos puros en escala ordinal (0 a 4), distribución de probabilidades por clase, nivel de confianza estadística y comprobaciones binarias (Seniority, Hands-on, Producción).
-   - Tarificación oficial verificada: **$0.042 por millón de tokens de entrada** (tokens de salida gratuitos). Un CV típico (~2,000 tokens) cuesta aproximadamente **$0.000084 USD**.
-
-2. **Gestión de Procesos y Convocatorias de Selección:**
-   - Creación de vacantes con pesos personalizados por dimensión: **Skills Técnicas**, **Experiencia en Producción**, **Educación/Fundamentos**, y **Liderazgo/Propiedad**.
-   - Umbral de corte configurable (por defecto 2.5 / 4.0).
-   - Control de ciclo de vida del proceso: **Activo** (admite CVs y evaluaciones), **Pausado** (en espera temporal), y **Cerrado / Inactivo** (solo lectura protegido).
-   - Filtros de estado en tiempo real en la cabina de control principal.
-
-3. **Ingesta Multi-PDF & Filtro de Calidad:**
-   - Carga simultánea de múltiples currículums en PDF mediante selector de archivos o *drag & drop* (optimizado para Safari y Chrome).
-   - Extracción de texto moderna en el servidor con `unpdf` (sin errores de streams binarios en PDFs modernos).
-   - Deduplicación por hash SHA-256: si un archivo ya fue cargado, se reutiliza y nunca se cobra dos veces.
-   - **Política de Idioma en Inglés:** Detección lingüística previa con `franc` y validación de stopwords; los CVs en otros idiomas se etiquetan como `WRONG_LANGUAGE` sin consumir cuota de tokens en la API de JEV.
-
-4. **Revisión Humana y Funnel de Candidatos (*Human in the Loop*):**
-   - **Selector de Etapa:** Permite avanzar a cada candidato a través del embudo de contratación (`📋 Postulado` → `🔍 En Revisión` → `🎙️ Entrevista` → `💼 Oferta` → `🎉 Contratado` → `🚫 Descartado`).
-   - **Filtros por Etapa:** Pestañas superiores para filtrar la tabla clasificatoria al instante.
-   - **Notas del Reclutador:** Modal dedicado para registrar observaciones cualitativas, feedback de entrevistas y pretensión salarial con indicador visual en la tabla.
-   - **Visor Integrado de CV y Evaluación:** Consulta el documento original extraído junto con el reporte ordinal de JEV.
-
-5. **Auditoría y Exportación:**
-   - Registro en base de datos (`AuditLog`) de cada cambio de estado, subida o evaluación.
-   - Exportación de la tabla clasificatoria a **CSV** con scores detallados, etapas y notas del reclutador.
+2. **🧾 Módulo Finanzas — Auditor Inteligente de Facturas Manuales Formulario 110 (`/finanzas`):**  
+   Auditoría en tiempo real de facturas físicas/manuales de empleados dependientes (normativa tributaria boliviana RC-IVA). Valida coherencia matemática ($\sum \text{ítems} = \text{Total}$), cotejo estricto de identidad (CI / Nombre), umbral de montos elevados (> 10.000 Bs) y detección de compras anómalas (ej. ascensores, maquinaria pesada) mediante juicio semántico con JEV. Incluye **100 facturas de prueba**, procesamiento en streaming con Server-Sent Events (SSE), visor de talonario físico original y botón de reset para repetir la demo.
 
 ---
 
-## 🏛️ Arquitectura del Proyecto
+## 🌟 Características de la Suite
 
-```
-cv-evaluator/
-├── docker-compose.yml             # Contenedor PostgreSQL 16 con volumen persistente
-├── prisma/
-│   ├── schema.prisma              # Modelos: Vacancy, Candidate, Application, CvDocument, Evaluation, AuditLog
-│   └── seed.ts                    # Vacantes y usuario administrador inicial
-├── sample_cvs/                    # 5 CVs de prueba en PDF (en inglés y español)
-├── storage/
-│   └── cvs/                       # Almacenamiento local de PDFs deduplicados por SHA-256
-└── src/
-    ├── app/
-    │   ├── page.tsx               # Cockpit ejecutivo con KPIs y listado de vacantes
-    │   ├── vacantes/
-    │   │   ├── nueva/             # Formulario de creación de vacantes con pesos
-    │   │   └── [id]/              # Sala de control del proceso, Leaderboard y carga de PDFs
-    │   └── api/
-    │       ├── vacancies/         # Endpoints REST para vacantes, subida, evaluación y CSV
-    │       ├── applications/      # Endpoints PATCH para etapa y notas del reclutador
-    │       └── auth/              # Configuración NextAuth (listo para Fase 2)
-    ├── components/
-    │   ├── CVDocumentViewer.tsx   # Modal visor de CV y evaluación JEV
-    │   ├── EvaluationCriteriaModal.tsx # Guía interactiva de rúbricas ordinales
-    │   ├── Navigation.tsx         # Barra de navegación principal
-    │   └── VacanciesListWithFilter.tsx # Grid de vacantes con pestañas y selector de estado
-    └── lib/
-        ├── languageDetector.ts    # Detección local de idioma (English-only gate)
-        ├── pricing.ts             # Motor de cálculo financiero JEV ($0.042 / 1M)
-        ├── prisma.ts              # Cliente Singleton de Prisma
-        ├── storage.ts             # Almacenamiento de archivos y extracción con unpdf
-        └── typesafe.ts            # Cliente oficial del SDK de TypeSafe AI (JEV)
-```
+### 1. Portal Centralizado Hub (`/`)
+* Punto de partida con acceso directo y métricas en vivo para ambos departamentos (Recursos Humanos y Finanzas).
+
+### 2. Evaluador de CVs Técnicos (`/vacantes`)
+* Rúbricas ordinales configurables (Skills, Producción, Fundamentos, Liderazgo).
+* Filtro de calidad lingüística (detección automática con `franc` para procesar únicamente CVs en inglés sin cobrar tokens por documentos descartados).
+* Extracción robusta de PDFs en servidor (`unpdf`).
+* Funnel de selección interactivo (`Postulado` → `En Revisión` → `Entrevista` → `Oferta` → `Contratado` → `Descartado`).
+* Modal de notas internas del reclutador y exportación a CSV.
+
+### 3. Auditor de Facturas Manuales RC-IVA (`/finanzas`)
+* **Proceso de demostración precargado:** *Presentación de facturas Carlos Morales Octubre 2026* con 100 facturas manuales pendientes.
+* **Procesamiento en Vivo (SSE Streaming):** Cronómetro en vivo, barra de progreso interactiva y contador de costo real acumulado ($0.042 / 1M input tokens).
+* **Visor de Factura Física:** Renderiza el talonario manual preimpreso tradicional con pie de imprenta legal, N° de factura rojo, sello húmedo de cancelado y total en palabras.
+* **Matriz de Auditoría JEV:** Veredicto claro (`APROBADA`, `REVISIÓN MANUAL`, `RECHAZADA`) con desglose de razones matemáticas, identidad y juicio semántico.
+* **Botón Reiniciar Demo (Reset):** Restablece las 100 facturas a estado pendiente y limpia las evaluaciones con un solo clic para repetir la presentación tantas veces como sea necesario.
 
 ---
 
-## 💰 Modelo Financiero Oficial (TypeSafe AI)
+## 💰 Modelo de Costos Oficial (TypeSafe AI)
 
-A diferencia de modelos generativos estándar inflados, JEV es un modelo discriminativo de Sistema Uno:
+A diferencia de LLMs generativos tradicionales costosos e impredecibles, **JEV (System One)** es un modelo discriminativo de decisiones atómicas:
 
 | Concepto | Tarifa Oficial |
 | :--- | :--- |
 | **Tokens de Entrada** | **$0.042 por millón de tokens** ($0.000000042 / token) |
 | **Tokens de Salida** | **$0.00 (Gratis)** |
-| **Costo promedio por CV** | **~$0.00008 USD** (~$0.08 USD por cada 1,000 CVs) |
+| **Costo por CV promedio** | **~$0.00008 USD** (100 CVs ≈ $0.008 USD) |
+| **Costo por Factura promedio** | **~$0.000035 USD** (100 Facturas ≈ $0.0035 USD) |
 
 $$\text{Costo USD} = \frac{\text{Tokens de Entrada} \times 0.042}{1,000,000}$$
 
 ---
 
-## 🚀 Puesta en Marcha (Desarrollo Local)
+## 🚀 Guía de Puesta en Marcha (Clonar en Otra Máquina)
+
+Sigue estos sencillos pasos para levantar el proyecto desde cero en cualquier máquina (Mac, Linux o Windows con WSL2):
 
 ### 1. Requisitos Previos
-- **Node.js** v18+ (recomendado v20+)
-- **Docker & Docker Compose** (para PostgreSQL)
-- **API Key de TypeSafe AI**
+* **Node.js** v18+ (recomendado v20+)
+* **Docker & Docker Compose** (para la base de datos PostgreSQL)
+* **Git**
 
-### 2. Configurar Variables de Entorno
-Crea o verifica tu archivo `.env.local` en la raíz del proyecto:
-
-```env
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/cv_evaluator?schema=public"
-NEXTAUTH_URL="http://localhost:3000"
-NEXTAUTH_SECRET="tu-clave-secreta-para-sesiones-jwt"
-TYPESAFE_API_KEY="tu_api_key_de_typesafe"
-JEV_INPUT_PRICE_PER_M="0.042"
+### 2. Clonar el Repositorio
+```bash
+git clone git@github.com:LucasGrc/JEV-CV-Evaluator.git
+cd JEV-CV-Evaluator
 ```
 
-### 3. Levantar la Base de Datos PostgreSQL
-Inicia el contenedor de PostgreSQL con Docker Compose:
+### 3. Instalar Dependencias
+```bash
+npm install
+```
 
+### 4. Configurar Variables de Entorno
+Copia el archivo de plantilla `.env.example` como `.env`:
+```bash
+cp .env.example .env
+```
+
+*(Opcional)* Si cuentas con tu propia API Key de TypeSafe AI, edita el archivo `.env` o `.env.local` e ingresa tu clave:
+```env
+TYPESAFE_AI_API_KEY="tu_api_key_de_typesafe"
+```
+> **Nota:** Si no configuras una API key, el sistema cuenta con modos de prueba y simulación estadística para poder navegar y evaluar las interfaces sin bloquearse.
+
+### 5. Levantar la Base de Datos PostgreSQL
+Inicia el contenedor Docker con la base de datos configurada:
 ```bash
 docker compose up -d
 ```
+> Esto iniciará un contenedor `cv_evaluator_postgres` en el puerto `5432` con usuario `cv_admin` y base de datos `cv_evaluator`.
 
-### 4. Sincronizar Prisma y Cargar Datos Iniciales
-Aplica el esquema a la base de datos y genera el cliente de Prisma:
-
+### 6. Sincronizar Esquema de Base de Datos
+Genera el cliente de Prisma y crea las tablas automáticamente:
 ```bash
-npx prisma db push
+npm run db:push
 ```
 
-*(Opcional) Cargar vacante inicial de demostración:*
+### 7. Cargar Datos de Demostración (Seed)
+Ejecuta la siembra automática que creará los usuarios administradores, las vacantes técnicas de RRHH y el proceso de 100 facturas para Finanzas:
 ```bash
-node --env-file=.env.local ./node_modules/.bin/tsx prisma/seed.ts
+npm run db:seed
 ```
+> También puedes ejecutar los seeds de forma independiente si lo prefieres:
+> - `npm run db:seed:rrhh` (Carga vacantes y usuario de RRHH)
+> - `npm run db:seed:finanzas` (Carga el proceso y las 100 facturas de Carlos Morales)
 
-### 5. Iniciar la Aplicación en Modo Desarrollo
+### 8. Iniciar el Servidor de Desarrollo
 ```bash
 npm run dev
 ```
 
-Abre en tu navegador: [http://localhost:3000](http://localhost:3000)
+Abre en tu navegador:  
+👉 **[http://localhost:3000](http://localhost:3000)**
 
 ---
 
-## 🧪 Cómo Probar el Flujo Completo
+## 🧪 Demostraciones en Vivo
 
-1. **Explorar el Cockpit (`/`):**
-   - Revisa las vacantes disponibles y utiliza los filtros (`Todos`, `Activos`, `Pausados`, `Cerrados`).
-   - Puedes cambiar el estado de cualquier proceso directamente desde la tarjeta.
+### A. Demostración de Finanzas (Facturas Manuales Formulario 110)
+1. Entra a `http://localhost:3000` y haz clic en **"Ir a Módulo Finanzas"** (o navega a `/finanzas/procesos`).
+2. Abre el proceso activo: **`Presentación de facturas Carlos Morales Octubre 2026`**.
+3. Haz clic en **`[ ⚡ Auditar 100 Facturas en Tiempo Real con JEV ]`**.
+4. Observa cómo el motor procesa en streaming cada factura, actualiza el cronómetro, calcula el costo en dólares y clasifica las facturas en tiempo real.
+5. Haz clic en **`[ 🧾 Ver Factura ]`** en cualquier fila para ver el talonario físico preimpreso, o en **`[ 🛡️ Auditoría JEV ]`** para ver el informe del veredicto.
+6. Al terminar, haz clic en **`[ 🔄 Reiniciar las 100 Facturas a Pendientes (Repetir Demo) ]`** para reiniciar todo y volver a presentar la demo.
 
-2. **Entrar a una Vacante (`/vacantes/[id]`):**
-   - Arrastra uno o varios currículums en PDF a la zona de carga (puedes usar los archivos de ejemplo en `sample_cvs/`).
-   - Si cargas un CV en español, el sistema lo detectará automáticamente y lo marcará como `NO-ENG` sin cobrar nada.
-
-3. **Ejecutar la Evaluación con JEV:**
-   - Haz clic en **"Iniciar Evaluación"**.
-   - El sistema enviará el texto extraído al modelo `jev-1.13.0`, calculará el score ordinal y ordenará a los candidatos de mayor a menor puntaje.
-
-4. **Gestión Humana y Notas:**
-   - En la columna **Etapa Selección**, cambia el estado del candidato (ej: pasa de `Postulado` a `Entrevista`).
-   - Haz clic en el botón **"Nota"** para abrir el panel de notas internas del reclutador y guardar observaciones.
-   - Pulsa **"Ver CV"** para inspeccionar el texto extraído y el desglose de confianza y dimensiones evaluadas por JEV.
-
-5. **Exportar Resultados:**
-   - Haz clic en **"Exportar CSV"** en la parte superior para descargar el reporte consolidado con candidatos, puntajes, etapas y notas.
+### B. Demostración de Recursos Humanos (Evaluador de CVs)
+1. Entra a `http://localhost:3000` y haz clic en **"Ir a Módulo RRHH"** (o navega a `/vacantes`).
+2. Abre la vacante: **`Senior Full-Stack Engineer (Next.js & TypeScript)`**.
+3. Carga uno o varios CVs de la carpeta `sample_cvs/` (arrastra y suelta).
+4. Haz clic en **`Iniciar Evaluación`** para ver la clasificación ordinal, niveles de confianza y cálculo de costos.
+5. Gestiona las etapas de selección de los candidatos, agrega notas y descarga el reporte consolidado en **CSV**.
 
 ---
 
-## 🔒 Nota sobre Autenticación (Fase 1 vs Fase 2)
-
-En esta **Fase 1**, la autenticación con NextAuth y la tabla de usuarios (`User`) están completamente configuradas a nivel de backend y base de datos (usuario inicial: `admin@reclutamiento.com` / `admin123`). Sin embargo, el bloqueo estricto de rutas (`middleware.ts`) se mantiene opcional para permitir una evaluación y prueba ágil sin fricción. La activación obligatoria de roles y permisos finos está programada para la **Fase 2**.
+## 🛡️ Seguridad, Privacidad y Cumplimiento
+* **Almacenamiento Local-First:** Los archivos originales (PDFs y fotos) se almacenan localmente y nunca abandonan la infraestructura corporativa.
+* **Compromiso Contractual de No Entrenamiento:** TypeSafe AI no utiliza datos de clientes para entrenar ni mejorar modelos generales.
+* **Zero Data Retention (ZDR):** En el nivel corporativo, los datos se procesan en memoria volátil cifrada (TLS 1.3) y se eliminan inmediatamente tras devolver el veredicto.
+* **Preparado para On-Premise / VPC:** En fase de producción, los modelos pueden desplegarse dentro de la VPC privada o datacenter de la empresa si las normativas sectoriales (ej. ASFI) así lo requieren.
 
 ---
 
-## 📄 Licencia y Créditos
+## 🏛️ Estructura del Código
+
+```
+cv-evaluator/
+├── docker-compose.yml             # Contenedor PostgreSQL 16
+├── .env.example                   # Plantilla de variables de entorno para clones limpios
+├── package.json                   # Scripts de ejecución, build y seed
+├── prisma/
+│   ├── schema.prisma              # Esquema unificado (RRHH + Finanzas)
+│   ├── seed.ts                    # Datos de prueba para RRHH (vacantes y admin)
+│   └── seed-100-invoices.ts       # Datos de prueba para Finanzas (100 facturas manuales)
+├── sample_cvs/                    # 5 CVs de prueba en PDF (inglés y español)
+├── src/
+│   ├── app/
+│   │   ├── page.tsx               # Hub principal multi-módulo
+│   │   ├── vacantes/              # Vistas de gestión y evaluación de CVs (RRHH)
+│   │   ├── finanzas/              # Vistas de procesos y auditoría de facturas (Finanzas)
+│   │   └── api/                   # Endpoints REST y streaming SSE
+│   ├── components/                # Componentes React (Visor de factura, tablas, modales)
+│   └── lib/                       # Motores de inferencia (JEV SDK, parsers, costes)
+```
+
+---
+
+## 📄 Licencia
 Desarrollado con TypeSafe AI System One SDK. Todos los derechos reservados.
