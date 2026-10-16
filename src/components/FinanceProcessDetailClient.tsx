@@ -30,9 +30,11 @@ import {
   ChevronDown,
   ChevronUp,
   Settings,
+  X,
 } from 'lucide-react';
 import { formatJevCost } from '@/lib/pricing';
 import { InvoiceDetailModal } from '@/components/InvoiceDetailModal';
+import { InvoiceVisualSheet } from '@/components/InvoiceVisualSheet';
 
 export const STATUS_CONFIG: Record<
   string,
@@ -128,8 +130,21 @@ export default function FinanceProcessDetailClient({ initialProcess }: ProcessDe
   const [isDragging, setIsDragging] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
 
-  // Modal detail
+  // Modal detail & Quick Sheet Preview
   const [selectedInvoice, setSelectedInvoice] = useState<InvoiceItem | null>(null);
+  const [previewVisualInvoice, setPreviewVisualInvoice] = useState<InvoiceItem | null>(null);
+
+  // Real-time evaluation streaming progress state
+  const [evalProgress, setEvalProgress] = useState<{
+    current: number;
+    total: number;
+    percentage: number;
+    elapsedMs: number;
+    totalCostUsd: number;
+    approvedCount: number;
+    manualReviewCount: number;
+    rejectedCount: number;
+  } | null>(null);
 
   // Rules drawer/modal
   const [showRulesDrawer, setShowRulesDrawer] = useState(false);
@@ -298,40 +313,123 @@ export default function FinanceProcessDetailClient({ initialProcess }: ProcessDe
     }
   };
 
-  // Run bulk evaluation with JEV
+  // Run bulk evaluation with JEV (Real-Time Streaming)
   const handleRunEvaluation = async () => {
     setEvaluating(true);
     setNotice(null);
 
     const startTime = Date.now();
+    const totalToEvaluate = pendingInvoices.length;
+
+    // Inicializar estado de progreso en vivo
+    setEvalProgress({
+      current: 0,
+      total: totalToEvaluate,
+      percentage: 0,
+      elapsedMs: 0,
+      totalCostUsd: 0,
+      approvedCount: 0,
+      manualReviewCount: 0,
+      rejectedCount: 0,
+    });
+
+    // Cronómetro en vivo
+    const timerInterval = setInterval(() => {
+      setEvalProgress((prev) =>
+        prev ? { ...prev, elapsedMs: Date.now() - startTime } : null
+      );
+    }, 100);
 
     try {
-      const res = await fetch(`/api/finance/processes/${process.id}/evaluate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      });
+      const res = await fetch(
+        `/api/finance/processes/${process.id}/evaluate?stream=true`,
+        {
+          method: 'POST',
+        }
+      );
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Error durante la auditoría');
-
-      const elapsedSec = ((Date.now() - startTime) / 1000).toFixed(1);
-
-      if (data.evaluatedCount === 0) {
-        setNotice({
-          type: 'info',
-          message: 'No había facturas pendientes de evaluación.',
-        });
-      } else {
-        setNotice({
-          type: 'success',
-          message: `✓ Auditoría JEV completada: ${data.evaluatedCount} facturas evaluadas en ${elapsedSec}s (${data.approvedCount} aprobadas, ${data.manualReviewCount} revisión manual, ${data.rejectedCount} rechazadas). Costo API: ${formatJevCost(data.totalCostUsd)}`,
-        });
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Error al iniciar la auditoría');
       }
+
+      if (!res.body) {
+        throw new Error('Streaming no disponible en el navegador');
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split('\n\n');
+        buffer = parts.pop() || '';
+
+        for (const part of parts) {
+          const lines = part.split('\n');
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const jsonStr = line.slice(6).trim();
+              if (!jsonStr) continue;
+
+              try {
+                const event = JSON.parse(jsonStr);
+
+                if (event.type === 'invoice_evaluated') {
+                  // 1. Actualizar barra de progreso y métricas en vivo
+                  setEvalProgress({
+                    current: event.progress.current,
+                    total: event.progress.total,
+                    percentage: event.progress.percentage,
+                    elapsedMs: event.liveStats.elapsedMs,
+                    totalCostUsd: event.liveStats.totalCostUsd,
+                    approvedCount: event.liveStats.approvedCount,
+                    manualReviewCount: event.liveStats.manualReviewCount,
+                    rejectedCount: event.liveStats.rejectedCount,
+                  });
+
+                  // 2. Actualizar la factura en la tabla en tiempo real
+                  setProcess((prev) => ({
+                    ...prev,
+                    invoices: prev.invoices.map((inv) =>
+                      inv.id === event.invoiceId
+                        ? {
+                            ...inv,
+                            status: 'EVALUATED',
+                            evaluation: event.evaluation,
+                          }
+                        : inv
+                    ),
+                  }));
+                } else if (event.type === 'complete') {
+                  const elapsedSec = (event.totalProcessingTimeMs / 1000).toFixed(1);
+                  setNotice({
+                    type: 'success',
+                    message: `✓ Auditoría JEV en tiempo real finalizada: ${event.totalEvaluated} facturas evaluadas en ${elapsedSec}s (${event.approvedCount} aprobadas, ${event.manualReviewCount} revisión manual, ${event.rejectedCount} rechazadas). Costo total API: ${formatJevCost(event.totalCostUsd)}`,
+                  });
+                } else if (event.type === 'error') {
+                  throw new Error(event.error);
+                }
+              } catch (parseErr) {
+                console.error('Error parseando chunk SSE:', parseErr);
+              }
+            }
+          }
+        }
+      }
+
       await refreshData();
     } catch (err: any) {
       setNotice({ type: 'error', message: `Error: ${err.message}` });
     } finally {
+      clearInterval(timerInterval);
       setEvaluating(false);
+      // Mantener visible el resumen de progreso 10 segundos
+      setTimeout(() => setEvalProgress(null), 10000);
     }
   };
 
@@ -789,14 +887,16 @@ export default function FinanceProcessDetailClient({ initialProcess }: ProcessDe
               {evaluating ? (
                 <>
                   <div className="w-4 h-4 border-2 border-slate-900/30 border-t-slate-900 rounded-full animate-spin" />
-                  <span>Auditando con JEV...</span>
+                  <span>
+                    Auditando en Vivo ({evalProgress?.current || 0}/{evalProgress?.total || pendingInvoices.length})...
+                  </span>
                 </>
               ) : (
                 <>
                   <Play className="w-4 h-4 fill-current" />
                   <span>
                     {pendingInvoices.length > 0
-                      ? `Auditar ${pendingInvoices.length} Factura(s) Pendiente(s)`
+                      ? `Auditar ${pendingInvoices.length} Factura(s) en Tiempo Real con JEV`
                       : 'Todas las facturas auditadas'}
                   </span>
                 </>
@@ -805,6 +905,87 @@ export default function FinanceProcessDetailClient({ initialProcess }: ProcessDe
           </div>
         </div>
       </div>
+
+      {/* Live Streaming Audit Progress Banner */}
+      {(evaluating || evalProgress) && evalProgress && (
+        <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 rounded-3xl p-6 text-white shadow-xl border border-emerald-500/40 space-y-4 animate-fadeIn">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-2xl bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center text-emerald-400 flex-shrink-0">
+                <Sparkles className="w-6 h-6 animate-pulse" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-extrabold tracking-tight">
+                    Auditoría Masiva con TypeSafe AI (JEV) en Tiempo Real
+                  </h3>
+                  {evaluating && (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 animate-pulse">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                      Procesando en Vivo
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Verificando Identidad (Nombre & CI), Consistencia Matemática (Suma de ítems = Total), Umbral de 10k Bs y Detección de Bienes Atípicos.
+                </p>
+              </div>
+            </div>
+
+            {/* Live Stopwatch & Cost Ticker */}
+            <div className="flex items-center gap-4 bg-slate-800/90 px-4 py-2.5 rounded-2xl border border-slate-700/80 text-xs font-mono shadow-inner flex-shrink-0">
+              <div>
+                <span className="text-[10px] text-slate-400 uppercase tracking-wider block">Tiempo Transcurrido</span>
+                <span className="text-sm font-bold text-slate-100 flex items-center gap-1">
+                  <Clock className="w-3.5 h-3.5 text-slate-400" />
+                  {((evalProgress.elapsedMs || 0) / 1000).toFixed(1)}s
+                </span>
+              </div>
+              <div className="h-7 w-px bg-slate-700" />
+              <div>
+                <span className="text-[10px] text-slate-400 uppercase tracking-wider block">Costo JEV API</span>
+                <span className="text-sm font-bold text-emerald-400 flex items-center gap-1">
+                  <Coins className="w-3.5 h-3.5 text-amber-400" />
+                  {formatJevCost(evalProgress.totalCostUsd)}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Progress bar */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-xs font-mono">
+              <span className="text-slate-300 font-sans font-semibold">
+                Progreso: <b>{evalProgress.current}</b> de <b>{evalProgress.total}</b> facturas
+              </span>
+              <span className="font-extrabold text-emerald-400 text-sm">{evalProgress.percentage}%</span>
+            </div>
+            <div className="w-full h-3.5 bg-slate-800/90 rounded-full overflow-hidden border border-slate-700/80 p-0.5">
+              <div
+                className="h-full bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-300 transition-all duration-150 rounded-full shadow-lg shadow-emerald-500/50"
+                style={{ width: `${evalProgress.percentage}%` }}
+              />
+            </div>
+          </div>
+
+          {/* Live Verdict Counters */}
+          <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-slate-800/80 text-xs">
+            <span className="text-slate-400 text-[11px] font-semibold">Veredictos en vivo:</span>
+            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-xl bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 font-bold">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+              {evalProgress.approvedCount} Aprobadas
+            </span>
+            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-xl bg-amber-500/10 text-amber-300 border border-amber-500/20 font-bold">
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+              {evalProgress.manualReviewCount} Revisión Manual
+            </span>
+            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-xl bg-rose-500/10 text-rose-300 border border-rose-500/20 font-bold">
+              <XCircle className="w-3.5 h-3.5 text-rose-400" />
+              {evalProgress.rejectedCount} Rechazadas
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Filter Tabs & Invoices Table */}
       <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
@@ -1050,17 +1231,33 @@ export default function FinanceProcessDetailClient({ initialProcess }: ProcessDe
 
                       {/* Acciones */}
                       <td className="py-3.5 px-4 text-center">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedInvoice(inv);
-                          }}
-                          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border border-slate-300 hover:bg-emerald-50 hover:border-emerald-300 text-slate-700 hover:text-emerald-800 font-bold text-xs transition-colors"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                          <span>Ver Detalle</span>
-                        </button>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPreviewVisualInvoice(inv);
+                            }}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold text-xs transition-colors shadow-sm"
+                            title="Ver Factura Impresa"
+                          >
+                            <Receipt className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Ver Factura</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedInvoice(inv);
+                            }}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-slate-300 hover:bg-emerald-50 hover:border-emerald-300 text-slate-700 hover:text-emerald-800 font-bold text-xs transition-colors shadow-sm"
+                            title="Ver Matriz de Auditoría JEV"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>Auditoría JEV</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -1081,6 +1278,63 @@ export default function FinanceProcessDetailClient({ initialProcess }: ProcessDe
           onClose={() => setSelectedInvoice(null)}
           onSaveVerdict={handleSaveVerdict}
         />
+      )}
+
+      {/* Quick Visual Invoice Sheet Modal */}
+      {previewVisualInvoice && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 animate-fadeIn">
+          <div className="bg-white rounded-3xl max-w-4xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
+            <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between border-b border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                  <Receipt className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-white">
+                    Comprobante Fiscal: {previewVisualInvoice.fileName}
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Representación Impresa Digital • Formato Estándar SIN Bolivia
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setPreviewVisualInvoice(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto flex-1 bg-slate-50">
+              <InvoiceVisualSheet
+                invoice={previewVisualInvoice}
+                employeeName={process.employeeName}
+                employeeCi={process.employeeCi}
+              />
+            </div>
+
+            <div className="px-6 py-3.5 bg-white border-t border-slate-200 flex items-center justify-between text-xs text-slate-500">
+              <button
+                onClick={() => {
+                  const inv = previewVisualInvoice;
+                  setPreviewVisualInvoice(null);
+                  setSelectedInvoice(inv);
+                }}
+                className="inline-flex items-center gap-1.5 text-emerald-700 hover:text-emerald-800 font-bold"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Ver Análisis y Dictamen de JEV</span>
+              </button>
+              <button
+                onClick={() => setPreviewVisualInvoice(null)}
+                className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold transition-colors"
+              >
+                Cerrar Ventana
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

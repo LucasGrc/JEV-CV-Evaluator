@@ -22,6 +22,7 @@ import {
   Building2,
 } from 'lucide-react';
 import { formatJevCost } from '@/lib/pricing';
+import { InvoiceVisualSheet } from '@/components/InvoiceVisualSheet';
 
 export interface InvoiceDetailProps {
   invoice: {
@@ -95,6 +96,7 @@ export function InvoiceDetailModal({
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [showRawText, setShowRawText] = useState(false);
+  const [activeTab, setActiveTab] = useState<'audit' | 'visual'>('audit');
 
   const handleSave = async () => {
     if (!onSaveVerdict) return;
@@ -175,9 +177,46 @@ export function InvoiceDetailModal({
           </div>
         </div>
 
+        {/* Modal View Tabs */}
+        <div className="bg-slate-900 px-6 pt-0 pb-0 border-b border-slate-800 flex items-center gap-4">
+          <button
+            type="button"
+            onClick={() => setActiveTab('audit')}
+            className={`pb-3 pt-2 text-xs font-bold border-b-2 transition-all flex items-center gap-1.5 ${
+              activeTab === 'audit'
+                ? 'border-emerald-400 text-emerald-400'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Sparkles className="w-4 h-4" />
+            <span>Matriz de Auditoría JEV</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('visual')}
+            className={`pb-3 pt-2 text-xs font-bold border-b-2 transition-all flex items-center gap-1.5 ${
+              activeTab === 'visual'
+                ? 'border-emerald-400 text-emerald-400'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Receipt className="w-4 h-4" />
+            <span>Ver Factura Original (Documento Impreso)</span>
+          </button>
+        </div>
+
         {/* Modal Content */}
         <div className="p-6 overflow-y-auto space-y-6 flex-1 text-slate-800">
-          {/* Key Facts Ribbon */}
+          {activeTab === 'visual' ? (
+            <InvoiceVisualSheet
+              invoice={invoice}
+              employeeName={employeeName}
+              employeeCi={employeeCi}
+            />
+          ) : (
+            <>
+              {/* Key Facts Ribbon */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-200">
             <div>
               <span className="text-[10px] font-bold uppercase text-slate-400 tracking-wider block">
@@ -596,7 +635,9 @@ export function InvoiceDetailModal({
               )}
             </div>
           )}
-        </div>
+        </>
+      )}
+    </div>
 
         {/* Modal Footer */}
         <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500">
