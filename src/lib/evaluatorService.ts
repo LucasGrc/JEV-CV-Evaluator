@@ -114,7 +114,7 @@ export async function processApplicationEvaluation(
   try {
     const cvText = application.cvDocument.extractedText;
     const response = await typeSafeEngine.evaluateResume(cvText, { bypassLanguageCheck: true });
-    const { answers, usage } = response;
+    const { answers, usage, model } = response;
     const procTime = Date.now() - startTime;
 
     // 5. Extract ordinal rubric scores (0.0 - 4.0)
@@ -180,7 +180,7 @@ export async function processApplicationEvaluation(
         scoreExperience: Number(experienceScore.toFixed(2)),
         scoreEducation: Number(educationScore.toFixed(2)),
         scoreLeadership: Number(leadershipScore.toFixed(2)),
-        jevRawResponses: answers as any,
+        jevRawResponses: { ...answers, model } as any,
         inputTokens: usage.input_tokens,
         outputTokens: usage.output_tokens,
         costUsd,
@@ -196,7 +196,7 @@ export async function processApplicationEvaluation(
         scoreExperience: Number(experienceScore.toFixed(2)),
         scoreEducation: Number(educationScore.toFixed(2)),
         scoreLeadership: Number(leadershipScore.toFixed(2)),
-        jevRawResponses: answers as any,
+        jevRawResponses: { ...answers, model } as any,
         inputTokens: usage.input_tokens,
         outputTokens: usage.output_tokens,
         costUsd,
@@ -223,6 +223,7 @@ export async function processApplicationEvaluation(
           overallScore,
           costUsd,
           tokens: usage.input_tokens,
+          model,
         },
       },
     });
