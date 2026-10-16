@@ -31,6 +31,7 @@ import {
   ChevronUp,
   Settings,
   X,
+  RotateCcw,
 } from 'lucide-react';
 import { formatJevCost } from '@/lib/pricing';
 import { InvoiceDetailModal } from '@/components/InvoiceDetailModal';
@@ -129,6 +130,7 @@ export default function FinanceProcessDetailClient({ initialProcess }: ProcessDe
   const [notice, setNotice] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   // Modal detail & Quick Sheet Preview
   const [selectedInvoice, setSelectedInvoice] = useState<InvoiceItem | null>(null);
@@ -457,6 +459,39 @@ export default function FinanceProcessDetailClient({ initialProcess }: ProcessDe
     await refreshData();
   };
 
+  // Reset process to PENDING state for demo repeat
+  const handleResetProcess = async () => {
+    if (
+      !window.confirm(
+        '¿Deseas reiniciar todas las facturas de este proceso a estado Pendiente para repetir la demostración en tiempo real?'
+      )
+    ) {
+      return;
+    }
+
+    setResetting(true);
+    setNotice(null);
+    setEvalProgress(null);
+
+    try {
+      const res = await fetch(`/api/finance/processes/${process.id}/reset`, {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al reiniciar proceso');
+
+      setNotice({
+        type: 'success',
+        message: `✓ Se reiniciaron exitosamente las ${data.resetCount} facturas a estado Pendiente. ¡Listo para volver a ejecutar la auditoría!`,
+      });
+      await refreshData();
+    } catch (err: any) {
+      setNotice({ type: 'error', message: `Error: ${err.message}` });
+    } finally {
+      setResetting(false);
+    }
+  };
+
   // Computed metrics
   const totalInvoices = process.invoices.length;
   const pendingInvoices = process.invoices.filter((i) => i.status === 'PENDING' || !i.evaluation);
@@ -619,6 +654,21 @@ export default function FinanceProcessDetailClient({ initialProcess }: ProcessDe
             >
               <RefreshCw className="w-3.5 h-3.5" />
               <span>Actualizar Datos</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleResetProcess}
+              disabled={resetting || evaluating}
+              className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-rose-200 bg-rose-50/70 hover:bg-rose-100 text-rose-700 text-xs font-bold transition-all shadow-sm disabled:opacity-50"
+              title="Reiniciar todas las facturas a estado Pendiente para repetir la demostración"
+            >
+              {resetting ? (
+                <div className="w-3.5 h-3.5 border-2 border-rose-600/30 border-t-rose-600 rounded-full animate-spin" />
+              ) : (
+                <RotateCcw className="w-3.5 h-3.5 text-rose-600" />
+              )}
+              <span>Reiniciar Demo (Reset)</span>
             </button>
           </div>
         </div>
@@ -890,29 +940,58 @@ export default function FinanceProcessDetailClient({ initialProcess }: ProcessDe
               </span>
             </div>
 
-            <button
-              onClick={handleRunEvaluation}
-              disabled={evaluating || pendingInvoices.length === 0}
-              className="w-full py-3 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-xs shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed hover:scale-[1.01]"
-            >
-              {evaluating ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-slate-900/30 border-t-slate-900 rounded-full animate-spin" />
-                  <span>
-                    Auditando en Vivo ({evalProgress?.current || 0}/{evalProgress?.total || pendingInvoices.length})...
-                  </span>
-                </>
-              ) : (
-                <>
-                  <Play className="w-4 h-4 fill-current" />
-                  <span>
-                    {pendingInvoices.length > 0
-                      ? `Auditar ${pendingInvoices.length} Factura(s) en Tiempo Real con JEV`
-                      : 'Todas las facturas auditadas'}
-                  </span>
-                </>
-              )}
-            </button>
+            {pendingInvoices.length === 0 ? (
+              <button
+                type="button"
+                onClick={handleResetProcess}
+                disabled={resetting}
+                className="w-full py-3 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs shadow-lg transition-all flex items-center justify-center gap-2 hover:scale-[1.01]"
+              >
+                {resetting ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-slate-950/30 border-t-slate-950 rounded-full animate-spin" />
+                    <span>Reiniciando facturas...</span>
+                  </>
+                ) : (
+                  <>
+                    <RotateCcw className="w-4 h-4" />
+                    <span>Reiniciar las {totalInvoices} Facturas a Pendientes (Repetir Demo)</span>
+                  </>
+                )}
+              </button>
+            ) : (
+              <button
+                onClick={handleRunEvaluation}
+                disabled={evaluating || pendingInvoices.length === 0}
+                className="w-full py-3 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-xs shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed hover:scale-[1.01]"
+              >
+                {evaluating ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-slate-900/30 border-t-slate-900 rounded-full animate-spin" />
+                    <span>
+                      Auditando en Vivo ({evalProgress?.current || 0}/{evalProgress?.total || pendingInvoices.length})...
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-4 h-4 fill-current" />
+                    <span>Auditar {pendingInvoices.length} Factura(s) en Tiempo Real con JEV</span>
+                  </>
+                )}
+              </button>
+            )}
+
+            {evaluatedInvoices.length > 0 && pendingInvoices.length > 0 && (
+              <button
+                type="button"
+                onClick={handleResetProcess}
+                disabled={resetting || evaluating}
+                className="w-full text-center text-[11px] text-slate-400 hover:text-rose-400 pt-1 transition-colors flex items-center justify-center gap-1.5"
+              >
+                <RotateCcw className="w-3 h-3" />
+                <span>Reiniciar todo a estado pendiente</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
