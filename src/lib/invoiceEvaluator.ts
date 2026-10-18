@@ -1,5 +1,6 @@
 import { choice } from '@typesafe-ai/sdk';
-import { TypeSafeClient } from '@typesafe-ai/sdk';
+import type { TypeSafeClient } from '@typesafe-ai/sdk';
+import { createTypeSafeClient } from '@/lib/typesafeConfig';
 import { calculateJevCostUsd } from '@/lib/pricing';
 import { ParsedInvoiceItem } from './invoiceParser';
 
@@ -78,6 +79,8 @@ export interface InvoiceEvaluationResult {
   inputTokens: number;
   costUsd: number;
   processingTimeMs: number;
+  jevAvailable: boolean;
+  jevError: string | null;
 }
 
 export class InvoiceEvaluator {
@@ -85,19 +88,9 @@ export class InvoiceEvaluator {
   private hasApiKey: boolean;
 
   constructor() {
-    const apiKey =
-      process.env.TYPESAFE_API_KEY ||
-      process.env.TYPESAFE_AI_API_KEY;
-
-    this.hasApiKey = Boolean(
-      apiKey &&
-      apiKey !== 'tsa_live_tu_api_key_aqui' &&
-      !apiKey.includes('tu_api_key')
-    );
-
-    this.client = new TypeSafeClient({
-      apiKey: apiKey || 'unconfigured-api-key',
-    });
+    const { client, hasApiKey } = createTypeSafeClient();
+    this.client = client;
+    this.hasApiKey = hasApiKey;
   }
 
   async evaluateInvoice(input: InvoiceEvaluationInput): Promise<InvoiceEvaluationResult> {
@@ -172,6 +165,8 @@ export class InvoiceEvaluator {
     let inputTokens = 0;
     let costUsd = 0.0;
     let jevRawResponse: any = null;
+    let jevAvailable = false;
+    let jevError: string | null = null;
 
     // Comprobación de palabras clave inmediatas (ej. ascensor) como fast-path determinista
     const rawLower = (invoice.rawText + ' ' + invoice.items.map((i) => i.description).join(' ')).toLowerCase();
@@ -212,6 +207,7 @@ export class InvoiceEvaluator {
         });
 
         jevRawResponse = response;
+        jevAvailable = true;
         inputTokens = response.usage.input_tokens || 850;
         costUsd = calculateJevCostUsd(inputTokens, response.usage.output_tokens || 0);
 
@@ -237,14 +233,20 @@ export class InvoiceEvaluator {
 
         confidence = Math.min(jevSuspicious.confidence, jevIdentity.confidence);
       } catch (err: any) {
-        console.warn('[InvoiceEvaluator] TypeSafe JEV call error (using fallback):', err.message);
-        inputTokens = 600;
-        costUsd = calculateJevCostUsd(inputTokens, 0);
+        console.error('[InvoiceEvaluator] TypeSafe JEV call failed:', err.message);
+        jevError = `JEV_INVOCATION_ERROR: ${err.message}`;
       }
     } else {
-      // Heurística de tokens de desarrollo
-      inputTokens = Math.max(300, Math.ceil(invoice.rawText.length / 4));
-      costUsd = calculateJevCostUsd(inputTokens, 0);
+      jevError = 'MISSING_TYPESAFE_API_KEY: Set TYPESAFE_API_KEY in .env.local to enable the JEV semantic check.';
+    }
+
+    if (!jevAvailable) {
+      confidence = 0;
+      inputTokens = 0;
+      costUsd = 0;
+      reasons.push(
+        `Verificación semántica con JEV no disponible (${jevError}). Se requiere revisión manual.`
+      );
     }
 
     // =========================================================================
@@ -254,7 +256,7 @@ export class InvoiceEvaluator {
 
     if (!identityMatch || !mathConsistent) {
       verdict = 'REJECTED';
-    } else if (amountAlert || suspiciousConceptAlert) {
+    } else if (amountAlert || suspiciousConceptAlert || !jevAvailable) {
       verdict = 'MANUAL_REVIEW';
     } else {
       verdict = 'APPROVED';
@@ -289,6 +291,8 @@ export class InvoiceEvaluator {
       inputTokens,
       costUsd,
       processingTimeMs,
+      jevAvailable,
+      jevError,
     };
   }
 }

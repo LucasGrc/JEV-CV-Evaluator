@@ -16,6 +16,7 @@ import {
 } from '@/types/evaluation';
 import { detectLanguage } from '@/lib/languageDetector';
 import { calculateJevCostUsd } from '@/lib/pricing';
+import { createTypeSafeClient } from '@/lib/typesafeConfig';
 
 export interface SystemOneEvaluationResponse {
   answers: {
@@ -43,19 +44,9 @@ export class TypeSafeEngine {
   private hasApiKey: boolean;
 
   constructor() {
-    const apiKey =
-      process.env.TYPESAFE_API_KEY ||
-      process.env.TYPESAFE_AI_API_KEY;
-
-    this.hasApiKey = Boolean(
-      apiKey &&
-      apiKey !== 'tsa_live_tu_api_key_aqui' &&
-      !apiKey.includes('tu_api_key')
-    );
-
-    this.client = new TypeSafeClient({
-      apiKey: apiKey || 'unconfigured-api-key',
-    });
+    const { client, hasApiKey } = createTypeSafeClient();
+    this.client = client;
+    this.hasApiKey = hasApiKey;
   }
 
   /**
